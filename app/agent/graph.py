@@ -1,0 +1,46 @@
+# -*- coding: utf-8 -*-
+"""LangGraph 编排。
+
+⚠️ 这个文件你自己写 —— "必须手写"第二项。
+
+骨架意图（节点实现见 nodes/）：
+
+    parse_target → blame → filter_noise → expand_history → link_context → assess
+                                              ↑                              │
+                                              └──── 信息不足且未超深度 ───────┘
+                                                                             │ 足够
+                                                              retrieve → narrate → END
+
+要点：
+  - assess 是条件边（add_conditional_edges），返回下一个节点名
+  - 必须有 loop limit，否则会一直往上爬。LangGraph 的 recursion_limit 是兜底，
+    业务上的 MAX_DEPTH 判断要自己写在 assess 里
+  - Checkpointer 用于 HITL 恢复；先用 MemorySaver 跑通，再换持久化的
+  - interrupt 打在 assess 之后、expand_history 之前
+
+参考：
+  https://langchain-ai.github.io/langgraph/concepts/low_level/
+  https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
+"""
+
+
+def build_graph():
+    """构建并编译状态机。
+
+    TODO:
+      - [ ] StateGraph(ArchaeologyState)
+      - [ ] add_node × 8
+      - [ ] add_conditional_edges('assess', route_fn)
+      - [ ] compile(checkpointer=..., interrupt_before=[...])
+    """
+    raise NotImplementedError
+
+
+def run(url: str, question: str | None = None) -> dict:
+    """同步跑一次考古。TODO"""
+    raise NotImplementedError
+
+
+async def astream(url: str, question: str | None = None):
+    """流式跑一次，逐步 yield 给 SSE。TODO"""
+    raise NotImplementedError

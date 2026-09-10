@@ -1,0 +1,28 @@
+# --- 编排 ---
+langgraph
+langchain
+langchain-openai
+
+# --- MCP ---
+mcp
+
+# --- 检索 ---
+rank-bm25
+chromadb
+sentence-transformers
+
+# --- 可观测 ---
+langfuse
+
+# --- Web ---
+fastapi
+uvicorn[standard]
+sse-starlette
+pydantic
+pydantic-settings
+
+# --- Git / GitHub ---
+GitPython
+httpx
+
+python-dotenv

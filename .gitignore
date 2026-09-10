@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.log
+
+# 克隆下来的仓库缓存与索引
+.cache/
+data/repos/
+data/index/
+data/chroma/
+
+.idea/
+.vscode/
+.DS_Store

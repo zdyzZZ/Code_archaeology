@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>代码考古学家</title>
+<style>
+  :root { --ink:#16211e; --muted:#6b7a76; --line:#dde2df; --accent:#0d5a4e; --bg:#f7f8f7; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.7 "Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:48px 20px 80px; }
+  h1 { font-size:30px; margin:0 0 8px; }
+  .sub { color:var(--muted); margin:0 0 32px; }
+  .bar { display:flex; gap:10px; }
+  input { flex:1; padding:11px 14px; border:1px solid var(--line); border-radius:8px;
+          font-size:14px; font-family:inherit; }
+  button { padding:11px 22px; border:0; border-radius:8px; background:var(--accent);
+           color:#fff; font-size:14px; cursor:pointer; font-family:inherit; }
+  button:disabled { opacity:.5; cursor:default; }
+  h2 { font-size:14px; color:var(--muted); font-weight:600; margin:36px 0 12px; }
+  .samples { display:grid; gap:8px; }
+  .samples button { background:#fff; color:var(--ink); border:1px solid var(--line);
+                    text-align:left; padding:12px 14px; font-size:13.5px; }
+  .samples button:hover { border-color:var(--accent); }
+  #log { margin-top:28px; }
+  .step { background:#fff; border:1px solid var(--line); border-left:3px solid var(--accent);
+          padding:10px 14px; margin-bottom:8px; font-size:13.5px; }
+  .empty { color:var(--muted); font-style:italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>代码考古学家</h1>
+  <p class="sub">GitLens 告诉你这行是谁改的。这个告诉你——为什么。</p>
+
+  <div class="bar">
+    <input id="url" placeholder="粘贴 GitHub 文件链接，例如 .../blob/main/src/foo.py#L42-L60">
+    <button id="go">开始考古</button>
+  </div>
+
+  <h2>没有现成链接？试试这些经典案例</h2>
+  <div class="samples" id="samples">
+    <!-- TODO: 从 /api/samples 拉取。挑那些带 "don't remove this, see #1234" 注释的著名片段 -->
+    <p class="empty">TODO：内置 6–8 个知名开源项目里的"怪代码"，一键试跑</p>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<script>
+// TODO: 接 /api/excavate/stream 的 SSE，把 Agent 每一步渲染成 .step
+// 让访客看见它在想什么 —— 这是演示效果的关键
+document.getElementById('go').onclick = () => {
+  const log = document.getElementById('log');
+  log.innerHTML = '<div class="step">TODO：接上 SSE 流</div>';
+};
+</script>
+</body>
+</html>
