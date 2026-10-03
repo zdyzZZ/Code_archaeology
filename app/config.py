@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # LLM
     openai_api_key: str = ''
     openai_base_url: str = ''
-    llm_model: str = 'gpt-4o-mini'
+    llm_model: str = ''
 
     # GitHub
     github_token: str = ''

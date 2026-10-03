@@ -24,21 +24,30 @@
   https://langchain-ai.github.io/langgraph/concepts/low_level/
 """
 from typing import TypedDict
-
+import operator
 
 class ArchaeologyState(TypedDict, total=False):
     # --- 输入 ---
     # TODO: repo / file_path / line_range / question
-
+    url: str
+    question: str
+    # ---parse_target---
+    owner: str
+    repo: str
+    ref: str
+    file_path: str
+    start_line: int
+    end_line: int
+    repo_path: str
     # --- blame 阶段 ---
     # TODO: blame 结果、被判为噪声而跳过的 commit
-
+    blame_lines: list[dict]
     # --- 历史扩展阶段 ---
     # TODO: commit 链（需要 Reducer？）
 
     # --- 关联上下文 ---
     # TODO: 抽到的 issue / PR 编号及其内容（需要 Reducer？）
-
+    issues: list[dict]
     # --- 检索 ---
     # TODO: 检索命中的片段
 
@@ -47,4 +56,5 @@ class ArchaeologyState(TypedDict, total=False):
 
     # --- 输出 ---
     # TODO: 时间线、结论
+    report: str
     ...

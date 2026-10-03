@@ -9,7 +9,7 @@
 一次 black 格式化就能把整个文件的 blame 全部覆盖。必须穿透。
 """
 from pathlib import Path
-
+from app.git.repo import run
 
 NOISE_PREFIXES = ('chore', 'style', 'format', 'lint', 'prettier', 'black', 'gofmt')
 
@@ -23,7 +23,38 @@ def blame(repo: Path, file_path: str, start: int, end: int) -> list[dict]:
       - [ ] 解析成 [{line, sha, author, date, summary}]
       - [ ] 结果缓存，key = (repo, HEAD sha, file_path, 行范围)
     """
-    raise NotImplementedError
+    out = run(['git', 'blame', '--porcelain', '-w',
+               '-L', '%d,%d' % (start, end), '--', file_path], cwd=repo)
+    commits = {}  # sha -> {author, summary}，porcelain 同一个 commit 只详细输出一次
+    result = []
+    current = None
+
+    for line in out.splitlines():
+        if line.startswith('\t'):
+            # 以 tab 开头的是代码内容本身，代表这一行结束
+            info = commits[current['sha']]
+            result.append({
+                'line': current['line'],
+                'sha': current['sha'],
+                'author': info.get('author', ''),
+                'summary': info.get('summary', ''),
+                'code': line[1:],
+            })
+            continue
+        parts = line.split(' ', 1)
+        key = parts[0]
+        value = parts[1] if len(parts) > 1 else ''
+
+        if len(key) == 40 and all(c in '0123456789abcdef' for c in key):
+            # 头行：<sha> <原行号> <现行号> [<行数>]
+            current = {'sha': key, 'line': int(value.split()[1])}
+            commits.setdefault(key, {})
+        elif key == 'author':
+            commits[current['sha']]['author'] = value
+        elif key == 'summary':
+            commits[current['sha']]['summary'] = value
+
+    return result
 
 
 def is_noise_commit(repo: Path, sha: str) -> bool:
@@ -47,3 +78,6 @@ def blame_through(repo: Path, file_path: str, start: int, end: int,
       - [ ] max_hops 兜底，别无限往上爬
     """
     raise NotImplementedError
+
+
+blame(repo=r'D:\Code Archaeologist\Code_archaeology',file_path=r'app\config.py',start=1,end=10)

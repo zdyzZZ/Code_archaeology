@@ -22,9 +22,16 @@
   https://langchain-ai.github.io/langgraph/concepts/low_level/
   https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
 """
+from app.agent.state import ArchaeologyState
+from langgraph.graph import StateGraph,START,END
+from app.agent.nodes.parse_target import parse_target
+from app.agent.nodes.blame import blame
+from app.agent.nodes.link_context import link_context
+from app.agent.nodes.narrate import narrate
+from langgraph.graph.state import CompiledStateGraph
 
 
-def build_graph():
+def build_graph() -> CompiledStateGraph:
     """构建并编译状态机。
 
     TODO:
@@ -33,14 +40,27 @@ def build_graph():
       - [ ] add_conditional_edges('assess', route_fn)
       - [ ] compile(checkpointer=..., interrupt_before=[...])
     """
-    raise NotImplementedError
+    graph = StateGraph(state_schema=ArchaeologyState)
+    graph.add_node('parse_target', parse_target)
+    graph.add_node('blame', blame)
+    graph.add_node('link_context', link_context)
+    graph.add_node('narrate', narrate)
+    graph.add_edge(START,'parse_target')
+    graph.add_edge('parse_target', 'blame')
+    graph.add_edge('blame', 'link_context')
+    graph.add_edge('link_context', 'narrate')
+    graph.add_edge('narrate',END)
+
+    return graph.compile()
 
 
 def run(url: str, question: str | None = None) -> dict:
     """同步跑一次考古。TODO"""
-    raise NotImplementedError
+    graph = build_graph()
+    return graph.invoke({'url': url, 'question': question or ''})
 
 
 async def astream(url: str, question: str | None = None):
     """流式跑一次，逐步 yield 给 SSE。TODO"""
     raise NotImplementedError
+
