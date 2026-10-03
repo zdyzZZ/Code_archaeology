@@ -12,20 +12,35 @@
   - 拉到的内容要落盘缓存，同一 issue 不重复请求
 """
 from app.agent.state import ArchaeologyState
-from app.github.client import extract_refs,get_issue
+from app.github.client import extract_refs,get_issue,git_commit_pulls
 import asyncio
 import httpx
+from app.git.log import commit_message
+from pathlib import Path
 
 def link_context(state: ArchaeologyState) -> dict:
     print('[link_context] 拿到 blame 行数 =', len(state['blame_lines']))
-    blame_lines = state['blame_lines']
     issues_list = []
     owner = state['owner']
     repo = state['repo']
     seen = set()
-    for blame_line in blame_lines:
-        summary = blame_line['summary']
-        numbers = extract_refs(summary)
+    repo_path = Path(state['repo_path'])
+    # 1. 按 sha 去重，拿每个 commit 的完整 message
+    commits = {}  # sha -> message
+    for line in state['blame_lines']:
+        if line['sha'] not in commits:
+            commits[line['sha']] = commit_message(repo_path, line['sha'])
+
+    # 2. 对每个 commit 找编号
+    for sha, message in commits.items():
+        numbers = extract_refs(message)  # 改成从完整 message 里抽
+        if not numbers:
+            # 抽不到 → 用 git_commit_pulls 反查，取出每个 PR 的 number
+            try:
+                datas = git_commit_pulls(owner, repo, sha)
+                numbers = [i['number'] for i in datas if i['merged_at']]
+            except httpx.HTTPStatusError as e:
+                print('[link_context] 反查 %s 的 PR 失败，跳过: %s' % (sha[:8], e.response.status_code))
         for number in numbers:
             if number not in seen:
                 seen.add(number)
@@ -37,10 +52,9 @@ def link_context(state: ArchaeologyState) -> dict:
                         'body': (data.get('body') or '')[:2000],  # body 可能是 None
                         'url': data['html_url'],
                         'is_pr': 'pull_request' in data,
-                        'from_sha': blame_line['sha'],
+                        'from_sha': sha,
                     })
                 except httpx.HTTPStatusError as e:
                     print('[link_context] 拉取 #%d 失败，跳过: %s' % (number, e.response.status_code))
 
-
-    return {'issues': issues_list}
+    return {'issues': issues_list,'commits': [{'sha': s, 'message': m} for s, m in commits.items()]}

@@ -35,15 +35,10 @@ def build_material(state: ArchaeologyState) -> str:
             f"{blame_line['code']}"
         )
 
-    blame_text = "\n".join(blame_text)
     # 涉及的 commit：来自 blame_lines，按 sha 去重
-    commits = {}
-    for line in state['blame_lines']:
-        commits[line['sha']] = line['summary']
-
     commit_text = ['## 涉及的 commit']
-    for sha, summary in commits.items():
-        commit_text.append(f"{sha[:8]}  {summary}")
+    for c in state['commits']:
+        commit_text.append(f"### {c['sha'][:8]}\n{c['message'][:1000]}")
 
     # 关联的 issue/PR：来自 issues
     issue_text = ['## 关联的 issue/PR']

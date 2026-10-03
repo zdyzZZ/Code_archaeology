@@ -42,6 +42,7 @@ class ArchaeologyState(TypedDict, total=False):
     # --- blame 阶段 ---
     # TODO: blame 结果、被判为噪声而跳过的 commit
     blame_lines: list[dict]
+    commits: list[dict]  # [{sha, message}]，link_context 填，narrate 用
     # --- 历史扩展阶段 ---
     # TODO: commit 链（需要 Reducer？）
 

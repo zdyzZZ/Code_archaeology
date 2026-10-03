@@ -42,6 +42,12 @@ def _headers() -> dict:
         h['Authorization'] = 'Bearer %s' % settings.github_token
     return h
 
+def git_commit_pulls(owner: str, repo: str, sha: str) -> list[dict]:
+    with httpx.Client(timeout=20) as c:
+        r = c.get('%s/repos/%s/%s/commits/%s/pulls' % (API, owner, repo, sha),
+                        headers=_headers())
+        r.raise_for_status()
+        return r.json()
 
 async def get_issue(owner: str, repo: str, number: int) -> dict:
     """拿 issue/PR 正文。GitHub 的 issues 接口同时覆盖 PR。TODO 加缓存。"""
