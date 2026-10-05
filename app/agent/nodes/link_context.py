@@ -15,7 +15,7 @@ from app.agent.state import ArchaeologyState
 from app.github.client import extract_refs,get_issue,git_commit_pulls
 import asyncio
 import httpx
-from app.git.log import commit_message
+from app.git.log import commit_info,commit_diff
 from pathlib import Path
 
 def link_context(state: ArchaeologyState) -> dict:
@@ -25,15 +25,17 @@ def link_context(state: ArchaeologyState) -> dict:
     repo = state['repo']
     seen = set()
     repo_path = Path(state['repo_path'])
+    file_path = Path(state['file_path'])
     # 1. 按 sha 去重，拿每个 commit 的完整 message
-    commits = {}  # sha -> message
+    commits = {}  # sha -> info
     for line in state['blame_lines']:
         if line['sha'] not in commits:
-            commits[line['sha']] = commit_message(repo_path, line['sha'])
-
+            info = commit_info(repo_path, line['sha']) # 拿完整的commit date,author,message
+            info['diff'] = commit_diff(repo_path, line['sha'],file_path)# 拿修改变化
+            commits[line['sha']] = info
     # 2. 对每个 commit 找编号
-    for sha, message in commits.items():
-        numbers = extract_refs(message)  # 改成从完整 message 里抽
+    for sha, info in commits.items():
+        numbers = extract_refs(info['message'],owner,repo)  # 改成从完整 message 里抽
         if not numbers:
             # 抽不到 → 用 git_commit_pulls 反查，取出每个 PR 的 number
             try:
@@ -57,4 +59,4 @@ def link_context(state: ArchaeologyState) -> dict:
                 except httpx.HTTPStatusError as e:
                     print('[link_context] 拉取 #%d 失败，跳过: %s' % (number, e.response.status_code))
 
-    return {'issues': issues_list,'commits': [{'sha': s, 'message': m} for s, m in commits.items()]}
+    return {'issues': issues_list,'commits': list(commits.values())}

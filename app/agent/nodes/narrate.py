@@ -35,20 +35,26 @@ def build_material(state: ArchaeologyState) -> str:
             f"{blame_line['code']}"
         )
 
-    # 涉及的 commit：来自 blame_lines，按 sha 去重
-    commit_text = ['## 涉及的 commit']
-    for c in state['commits']:
-        commit_text.append(f"### {c['sha'][:8]}\n{c['message'][:1000]}")
-
+    # 涉及的 commit：来自 state['commits']，按 sha 去重
     # 关联的 issue/PR：来自 issues
     issue_text = ['## 关联的 issue/PR']
-    if not state['issues']:
-        issue_text.append('没有找到关联的 issue/PR')
-    for issue in state['issues']:
-        kind = 'PR' if issue['is_pr'] else 'issue'
-        issue_text.append(f"### #{issue['number']} ({kind}) {issue['title']}")
-        issue_text.append(f"来源 commit: {issue['from_sha'][:8]}")
-        issue_text.append(f"正文：{issue['body']}")
+    commit_text = ['## 涉及的 commit']
+    for c in state['commits']:
+        commit_text.append(f"### {c['sha'][:8]}  {c['date']}  {c['author']}")
+        commit_text.append(f"提交说明：\n{c['message'][:1000]}")
+        commit_text.append(f"本次改动：\n{c['diff']}")
+
+        if not state['issues']:
+            issue_text.append('没有找到关联的 issue/PR')
+        for issue in state['issues']:
+            kind = 'PR' if issue['is_pr'] else 'issue'
+            issue_text.append(f"### #{issue['number']} ({kind}) {issue['title']}")
+            issue_text.append(f"来源 commit: {issue['from_sha'][:8]}")
+            issue_text.append(f"正文：{issue['body']}")
+
+    if state['question']:
+        human_question = f'问题: {state["question"]}'
+        return '\n\n'.join([human_question,'\n',human_str, '\n'.join(blame_text), '\n'.join(commit_text), '\n'.join(issue_text)])
     return '\n\n'.join([human_str, '\n'.join(blame_text), '\n'.join(commit_text), '\n'.join(issue_text)])
 
 

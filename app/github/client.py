@@ -18,21 +18,41 @@ API = 'https://api.github.com'
 GRAPHQL = 'https://api.github.com/graphql'
 
 # commit message 里的 issue/PR 引用
-REF_PATTERNS = [
-    re.compile(r'#(\d+)'),
-    re.compile(r'GH-(\d+)', re.I),
-    re.compile(r'github\.com/[\w.-]+/[\w.-]+/(?:issues|pull)/(\d+)'),
+LOCAL_PATTERNS = [
+    re.compile(r"#(\d+)"),
+    re.compile(r"GH-(\d+)", re.IGNORECASE),
 ]
 
+URL_PATTERN = re.compile(
+    r"https?://github\.com/([^/\s]+)/([^/\s]+)/(?:issues|pull)/(\d+)"
+)
 
-def extract_refs(text: str) -> list[int]:
-    """从文本里抽 issue / PR 编号。
 
-    注意：#123 也可能是"第 123 行"之类的误报，后面拉取失败要能容忍。
-    """
+def extract_refs(text: str,owner: str,repo: str) -> list[int]:
+    """从文本中抽当前仓库的 issue / PR 编号，跨仓库引用直接忽略。"""
+
+    text = text or ""
     out: list[int] = []
-    for p in REF_PATTERNS:
-        out += [int(m) for m in p.findall(text or '')]
+
+    # 1. #123 / GH-123
+    # 没写仓库，默认属于当前仓库
+    for p in LOCAL_PATTERNS:
+        out += [int(m) for m in p.findall(text)]
+
+    # 2. 完整 GitHub URL
+    for m in URL_PATTERN.finditer(text):
+        ref_owner = m.group(1)
+        ref_repo = m.group(2)
+        number = int(m.group(3))
+
+        # 只保留当前仓库
+        if ref_owner.lower() != owner.lower():
+            continue
+
+        if ref_repo.lower() != repo.lower():
+            continue
+        out.append(number)
+
     return sorted(set(out))
 
 

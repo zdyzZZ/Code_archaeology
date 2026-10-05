@@ -64,3 +64,5 @@ async def astream(url: str, question: str | None = None):
     """流式跑一次，逐步 yield 给 SSE。TODO"""
     raise NotImplementedError
 
+if __name__ == '__main__':
+    res = run('https://github.com/psf/requests/blob/main/src/requests/adapters.py#L97C5-L105C41')

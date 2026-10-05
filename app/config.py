@@ -3,9 +3,9 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
+ROOT = Path(__file__).resolve().parent.parent       # 项目根目录
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
+    model_config = SettingsConfigDict(env_file=ROOT / '.env', extra='ignore')
 
     # LLM
     openai_api_key: str = ''
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # 运行约束
     max_depth: int = 3
     max_tokens_per_run: int = 120_000
-    cache_dir: Path = Path('./data')
+    cache_dir: Path = ROOT / 'data'
 
     @property
     def repos_dir(self) -> Path:

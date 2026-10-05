@@ -13,7 +13,7 @@
   - 只需要 blame，不需要完整历史 → 可以考虑 --filter=blob:none 的部分克隆省时间
 """
 import re
-
+from app.agent.state import ArchaeologyState
 from app.git.repo import ensure_cloned
 
 URL_RE = re.compile(
@@ -21,7 +21,7 @@ URL_RE = re.compile(
     r'(?:#L(\d+)(?:C\d+)?(?:-L(\d+)(?:C\d+)?)?)?'   # #L12 / #L12-L30 / #L12C5-L30C41
 )
 
-def parse_target(state: dict) -> dict:
+def parse_target(state: ArchaeologyState) -> dict:
     """TODO"""
     m = URL_RE.search(state['url'])
     if not m:
