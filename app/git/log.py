@@ -18,3 +18,9 @@ def commit_diff(repo: Path, sha: str,file_path:Path) -> str:
     elif not out:
         return "(这个 commit 对该文件没有 diff)"
     return out
+
+
+def line_history(repo: Path, file_path:Path,start:int,end:int) -> list[str]:
+    '''追踪历史链'''
+    out = run(['git','log','-L',f'{start},{end}:{file_path}','--format=%H','-s'],cwd=repo)
+    return [line.strip() for line in out.splitlines() if line.strip()]

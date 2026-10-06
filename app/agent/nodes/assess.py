@@ -15,8 +15,14 @@
   - 硬约束（depth / token）必须用代码判断，不要交给 LLM——LLM 会说"再挖一层吧"挖到天荒地老
   - 面试会问："凭什么判断挖到第几层就够了？" 你要能答出这里的设计
 """
+from app.agent.state import ArchaeologyState
+from app.config import settings
 
-
-def assess(state: dict) -> dict:
+def assess(state: ArchaeologyState) -> dict:
     """TODO"""
-    raise NotImplementedError
+    max_depth = settings.max_depth
+    if not state['new_shas']:
+        return {'enough': True, 'missing': '没有更早的历史了'}
+    if state['depth'] >= max_depth:
+        return {'enough':True}
+    return {'enough':False}

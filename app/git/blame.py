@@ -28,7 +28,6 @@ def blame(repo: Path, file_path: str, start: int, end: int) -> list[dict]:
     commits = {}  # sha -> {author, summary}，porcelain 同一个 commit 只详细输出一次
     result = []
     current = None
-
     for line in out.splitlines():
         if line.startswith('\t'):
             # 以 tab 开头的是代码内容本身，代表这一行结束

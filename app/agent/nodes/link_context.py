@@ -19,7 +19,7 @@ from app.git.log import commit_info,commit_diff
 from pathlib import Path
 
 def link_context(state: ArchaeologyState) -> dict:
-    print('[link_context] 拿到 blame 行数 =', len(state['blame_lines']))
+    print('[link_context] 本层处理 %d 个 commit' % len(state['new_shas']))
     issues_list = []
     owner = state['owner']
     repo = state['repo']
@@ -28,11 +28,12 @@ def link_context(state: ArchaeologyState) -> dict:
     file_path = Path(state['file_path'])
     # 1. 按 sha 去重，拿每个 commit 的完整 message
     commits = {}  # sha -> info
-    for line in state['blame_lines']:
-        if line['sha'] not in commits:
-            info = commit_info(repo_path, line['sha']) # 拿完整的commit date,author,message
-            info['diff'] = commit_diff(repo_path, line['sha'],file_path)# 拿修改变化
-            commits[line['sha']] = info
+    # 查找历史sha
+    for new_sha in state['new_shas']:
+        if new_sha not in commits:
+            info = commit_info(repo_path, new_sha)
+            info['diff'] = commit_diff(repo_path, new_sha,file_path)
+            commits[new_sha] = info
     # 2. 对每个 commit 找编号
     for sha, info in commits.items():
         numbers = extract_refs(info['message'],owner,repo)  # 改成从完整 message 里抽

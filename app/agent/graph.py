@@ -22,13 +22,24 @@
   https://langchain-ai.github.io/langgraph/concepts/low_level/
   https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
 """
+from langgraph.types import Command
+
 from app.agent.state import ArchaeologyState
 from langgraph.graph import StateGraph,START,END
 from app.agent.nodes.parse_target import parse_target
+from app.agent.nodes.expand_history import expand_history
 from app.agent.nodes.blame import blame
 from app.agent.nodes.link_context import link_context
 from app.agent.nodes.narrate import narrate
 from langgraph.graph.state import CompiledStateGraph
+from app.agent.nodes.assess import assess
+
+
+
+def router(state:ArchaeologyState):
+    if state['enough']:
+        return 'narrate'
+    return 'expand_history'
 
 
 def build_graph() -> CompiledStateGraph:
@@ -45,10 +56,14 @@ def build_graph() -> CompiledStateGraph:
     graph.add_node('blame', blame)
     graph.add_node('link_context', link_context)
     graph.add_node('narrate', narrate)
+    graph.add_node('expand_history', expand_history)
+    graph.add_node('assess', assess)
     graph.add_edge(START,'parse_target')
     graph.add_edge('parse_target', 'blame')
     graph.add_edge('blame', 'link_context')
-    graph.add_edge('link_context', 'narrate')
+    graph.add_edge('link_context', 'assess')
+    graph.add_conditional_edges('assess',router, ['narrate', 'expand_history'])
+    graph.add_edge('expand_history', 'link_context')
     graph.add_edge('narrate',END)
 
     return graph.compile()
@@ -65,4 +80,4 @@ async def astream(url: str, question: str | None = None):
     raise NotImplementedError
 
 if __name__ == '__main__':
-    res = run('https://github.com/psf/requests/blob/main/src/requests/adapters.py#L97C5-L105C41')
+    res = run('')

@@ -23,7 +23,7 @@
 参考：
   https://langchain-ai.github.io/langgraph/concepts/low_level/
 """
-from typing import TypedDict
+from typing import TypedDict, Annotated
 import operator
 
 class ArchaeologyState(TypedDict, total=False):
@@ -39,22 +39,25 @@ class ArchaeologyState(TypedDict, total=False):
     start_line: int
     end_line: int
     repo_path: str
+    new_shas : list[str]
+    # ---assess(评估)---
+    enough: bool  # assess 写入：材料够不够
+    missing: str  # assess 写入：还缺什么（给日志和下一轮参考）
     # --- blame 阶段 ---
     # TODO: blame 结果、被判为噪声而跳过的 commit
     blame_lines: list[dict]
-    commits: list[dict]  # [{sha, message}]，link_context 填，narrate 用
     # --- 历史扩展阶段 ---
     # TODO: commit 链（需要 Reducer？）
-
+    commits: Annotated[list[dict],operator.add]  # [{sha, message}]，link_context 填，narrate 用
     # --- 关联上下文 ---
     # TODO: 抽到的 issue / PR 编号及其内容（需要 Reducer？）
-    issues: list[dict]
+    issues: Annotated[list[dict],operator.add]
     # --- 检索 ---
     # TODO: 检索命中的片段
 
     # --- 控制 ---
     # TODO: depth / tokens_used / needs_human
-
+    depth: int
     # --- 输出 ---
     # TODO: 时间线、结论
     report: str

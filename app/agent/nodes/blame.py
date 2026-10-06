@@ -19,4 +19,5 @@ def blame(state: ArchaeologyState) -> dict:
                       state['start_line'], state['end_line'])
     print('[blame] 拿到 %d 行，涉及 %d 个 commit'
           % (len(lines), len({l['sha'] for l in lines})))
-    return {'blame_lines': lines}
+    new_shas = list(dict.fromkeys(i["sha"] for i in lines))
+    return {'blame_lines': lines,'new_shas':new_shas,'depth':0}
