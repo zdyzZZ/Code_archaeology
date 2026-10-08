@@ -15,15 +15,36 @@ from app.agent.state import ArchaeologyState
 from app.github.client import extract_refs,get_issue,git_commit_pulls
 import asyncio
 import httpx
-from app.git.log import commit_info,commit_diff
+from app.git.log import commit_info, commit_diff, line_history
 from pathlib import Path
+
+
+
+def fetch_ref(owner, repo, number, sha, via_pr=None):
+    """拉取一个 issue/PR，失败返回 None。"""
+    try:
+        data = asyncio.run(get_issue(owner, repo, number))
+    except httpx.HTTPStatusError as e:
+        print('[link_context] 拉取 #%d 失败，跳过: %s' % (number, e.response.status_code))
+        return None
+    body = data.get('body') or ''
+    return {
+        'number': number,
+        'title': data['title'],
+        'body': body[:2000],
+        'url': data['html_url'],
+        'is_pr': 'pull_request' in data,
+        'from_sha': sha,
+        'via_pr': via_pr,                           # 从哪个 PR 跳过来的，直接关联的就是 None
+        'refs': extract_refs(body, owner, repo),    # 正文里引用的编号，用完整正文抽，不用截断后的
+    }
 
 def link_context(state: ArchaeologyState) -> dict:
     print('[link_context] 本层处理 %d 个 commit' % len(state['new_shas']))
     issues_list = []
     owner = state['owner']
     repo = state['repo']
-    seen = set()
+    seen = set([i['number'] for i in state['issues']])
     repo_path = Path(state['repo_path'])
     file_path = Path(state['file_path'])
     # 1. 按 sha 去重，拿每个 commit 的完整 message
@@ -33,31 +54,31 @@ def link_context(state: ArchaeologyState) -> dict:
         if new_sha not in commits:
             info = commit_info(repo_path, new_sha)
             info['diff'] = commit_diff(repo_path, new_sha,file_path)
+            history = {h['sha']: h['diff'] for h in
+                       line_history(repo_path, file_path, state['start_line'], state['end_line'])}
+            info['diff'] = history.get(new_sha, '（未能获取该提交在这几行的改动）')
             commits[new_sha] = info
     # 2. 对每个 commit 找编号
     for sha, info in commits.items():
         numbers = extract_refs(info['message'],owner,repo)  # 改成从完整 message 里抽
-        if not numbers:
-            # 抽不到 → 用 git_commit_pulls 反查，取出每个 PR 的 number
-            try:
-                datas = git_commit_pulls(owner, repo, sha)
-                numbers = [i['number'] for i in datas if i['merged_at']]
-            except httpx.HTTPStatusError as e:
-                print('[link_context] 反查 %s 的 PR 失败，跳过: %s' % (sha[:8], e.response.status_code))
+        # 用 git_commit_pulls 反查，取出每个 PR 的 number
+        try:
+            datas = git_commit_pulls(owner, repo, sha)
+            numbers += [i['number'] for i in datas if i['merged_at']]
+        except httpx.HTTPStatusError as e:
+            print('[link_context] 反查 %s 的 PR 失败，跳过: %s' % (sha[:8], e.response.status_code))
         for number in numbers:
             if number not in seen:
                 seen.add(number)
-                try:
-                    data = asyncio.run(get_issue(owner, repo, number))
-                    issues_list.append({
-                        'number': number,
-                        'title': data['title'],
-                        'body': (data.get('body') or '')[:2000],  # body 可能是 None
-                        'url': data['html_url'],
-                        'is_pr': 'pull_request' in data,
-                        'from_sha': sha,
-                    })
-                except httpx.HTTPStatusError as e:
-                    print('[link_context] 拉取 #%d 失败，跳过: %s' % (number, e.response.status_code))
+                item = fetch_ref(owner, repo, number, sha)
+                if item is None:
+                    continue
+                issues_list.append(item)
+                if item['is_pr']: # 如果还查到关联的pr
+                    for ref in item['refs']: # 下一跳的pr编号
+                        if ref in seen:
+                            continue
+                        sub = fetch_ref(owner, repo, ref, sha,via_pr=number)
+                        issues_list.append(sub)
 
     return {'issues': issues_list,'commits': list(commits.values())}

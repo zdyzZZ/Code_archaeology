@@ -20,7 +20,20 @@ def commit_diff(repo: Path, sha: str,file_path:Path) -> str:
     return out
 
 
-def line_history(repo: Path, file_path:Path,start:int,end:int) -> list[str]:
+def line_history(repo: Path, file_path:Path,start:int,end:int) -> list[dict]:
     '''追踪历史链'''
-    out = run(['git','log','-L',f'{start},{end}:{file_path}','--format=%H','-s'],cwd=repo)
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    out = run(['git','log','-L',f'{start},{end}:{file_path}','--format=@@COMMIT %H'],cwd=repo)
+    history = []
+
+    for chunk in out.split("@@COMMIT "):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+
+        sha, diff = chunk.split("\n", 1)
+
+        history.append({
+            "sha": sha.strip(),
+            "diff": diff.strip(),
+        })
+    return history

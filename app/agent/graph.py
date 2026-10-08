@@ -80,4 +80,4 @@ async def astream(url: str, question: str | None = None):
     raise NotImplementedError
 
 if __name__ == '__main__':
-    res = run('')
+    res = run('https://github.com/psf/requests/blob/main/src/requests/utils.py#L50-L60')

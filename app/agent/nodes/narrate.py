@@ -35,27 +35,25 @@ def build_material(state: ArchaeologyState) -> str:
             f"{blame_line['code']}"
         )
 
-    # 涉及的 commit：来自 state['commits']，按 sha 去重
-    # 关联的 issue/PR：来自 issues
-    issue_text = ['## 关联的 issue/PR']
-    commit_text = ['## 涉及的 commit']
-    for c in state['commits']:
+    commit_text = ['## 改动记录（从旧到新）']
+    for c in sorted(state['commits'], key=lambda c: c['date']):
         commit_text.append(f"### {c['sha'][:8]}  {c['date']}  {c['author']}")
         commit_text.append(f"提交说明：\n{c['message'][:1000]}")
-        commit_text.append(f"本次改动：\n{c['diff']}")
+        commit_text.append(f"本次改动：\n{c['diff'][:1500]}")
 
-        if not state['issues']:
-            issue_text.append('没有找到关联的 issue/PR')
-        for issue in state['issues']:
-            kind = 'PR' if issue['is_pr'] else 'issue'
-            issue_text.append(f"### #{issue['number']} ({kind}) {issue['title']}")
-            issue_text.append(f"来源 commit: {issue['from_sha'][:8]}")
-            issue_text.append(f"正文：{issue['body']}")
+        related = [i for i in state['issues'] if i['from_sha'] == c['sha']]
+        if not related:
+            commit_text.append('关联的 issue/PR：无')
+        for i in related:
+            kind = 'PR' if i['is_pr'] else 'issue'
+            source = f"（由 PR #{i['via_pr']} 引用）" if i['via_pr'] else ''
+            commit_text.append(f"#### #{i['number']} ({kind}) {i['title']} {source}")
+            commit_text.append(f"正文：{i['body'][:1500]}")
 
+    parts = [human_str, '\n'.join(blame_text), '\n'.join(commit_text)]
     if state['question']:
-        human_question = f'问题: {state["question"]}'
-        return '\n\n'.join([human_question,'\n',human_str, '\n'.join(blame_text), '\n'.join(commit_text), '\n'.join(issue_text)])
-    return '\n\n'.join([human_str, '\n'.join(blame_text), '\n'.join(commit_text), '\n'.join(issue_text)])
+        parts.insert(0, f"## 用户想知道\n{state['question']}")
+    return '\n\n'.join(parts)
 
 
 def narrate(state: ArchaeologyState) -> dict:
