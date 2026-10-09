@@ -17,12 +17,31 @@
 """
 from app.agent.state import ArchaeologyState
 from app.config import settings
+from app.agent.llm import get_llm
+from pathlib import Path
+from app.agent.nodes.narrate import build_material
+from pydantic import BaseModel, Field
+
+SYSTEM_PROMPT = (Path(__file__).parent.parent / 'prompts' / 'assess.md').read_text(encoding='utf-8')
+
+
+# 模型返回格式
+class AssessResult(BaseModel):
+    enough: bool = Field(description="当前证据是否足够")
+    missing: str = Field(description="判断证据是否足够的原因")
 
 def assess(state: ArchaeologyState) -> dict:
     """TODO"""
     max_depth = settings.max_depth
     if not state['new_shas']:
-        return {'enough': True, 'missing': '没有更早的历史了'}
+        print(f'-------无更多提交历史-------')
+        return {'enough': True, 'missing': '没有更早的历史了','stop_reason':'无更多历史提交'}
     if state['depth'] >= max_depth:
-        return {'enough':True}
-    return {'enough':False}
+        print('-------循环次数达到上限-------')
+        return {'enough':True,'stop_reason':'循环次数达到上限'}
+    llm = get_llm()
+    human_message = build_material(state)
+    structured_llm = llm.with_structured_output(AssessResult)
+    result = structured_llm.invoke([('system',SYSTEM_PROMPT),('human',human_message)])
+    print(f'-------模型判断证据是否足够:{result.enough}，原因:{result.missing}-------')
+    return {'enough':result.enough,'missing':result.missing, "stop_reason": "模型判断证据足够" if result.enough else None}

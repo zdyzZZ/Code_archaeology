@@ -31,7 +31,7 @@ def fetch_ref(owner, repo, number, sha, via_pr=None):
     return {
         'number': number,
         'title': data['title'],
-        'body': body[:2000],
+        'body': body[:4000],
         'url': data['html_url'],
         'is_pr': 'pull_request' in data,
         'from_sha': sha,

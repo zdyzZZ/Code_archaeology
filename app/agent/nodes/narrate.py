@@ -48,9 +48,12 @@ def build_material(state: ArchaeologyState) -> str:
             kind = 'PR' if i['is_pr'] else 'issue'
             source = f"（由 PR #{i['via_pr']} 引用）" if i['via_pr'] else ''
             commit_text.append(f"#### #{i['number']} ({kind}) {i['title']} {source}")
-            commit_text.append(f"正文：{i['body'][:1500]}")
-
+            commit_text.append(f"正文：{i['body'][:4000]}")
     parts = [human_str, '\n'.join(blame_text), '\n'.join(commit_text)]
+
+    if state.get('stop_reason') in ['循环次数达到上限','无更多历史提交']:
+        stop_reason = f'## 停止原因:{state["stop_reason"]}\n仍然缺少:{state.get("missing")}'
+        parts.append(stop_reason)
     if state['question']:
         parts.insert(0, f"## 用户想知道\n{state['question']}")
     return '\n\n'.join(parts)

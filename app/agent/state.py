@@ -23,7 +23,7 @@
 参考：
   https://langchain-ai.github.io/langgraph/concepts/low_level/
 """
-from typing import TypedDict, Annotated
+from typing import TypedDict, Annotated, Literal
 import operator
 
 class ArchaeologyState(TypedDict, total=False):
@@ -43,6 +43,7 @@ class ArchaeologyState(TypedDict, total=False):
     # ---assess(评估)---
     enough: bool  # assess 写入：材料够不够
     missing: str  # assess 写入：还缺什么（给日志和下一轮参考）
+    stop_reason: Literal['无更多历史提交','循环次数达到上限','模型判断证据足够'] | None
     # --- blame 阶段 ---
     # TODO: blame 结果、被判为噪声而跳过的 commit
     blame_lines: list[dict]
