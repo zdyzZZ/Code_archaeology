@@ -50,12 +50,11 @@ def link_context(state: ArchaeologyState) -> dict:
     # 1. 按 sha 去重，拿每个 commit 的完整 message
     commits = {}  # sha -> info
     # 查找历史sha
+    history = {h['sha']: h['diff'] for h in
+               line_history(repo_path, file_path, state['start_line'], state['end_line'])}
     for new_sha in state['new_shas']:
         if new_sha not in commits:
             info = commit_info(repo_path, new_sha)
-            info['diff'] = commit_diff(repo_path, new_sha,file_path)
-            history = {h['sha']: h['diff'] for h in
-                       line_history(repo_path, file_path, state['start_line'], state['end_line'])}
             info['diff'] = history.get(new_sha, '（未能获取该提交在这几行的改动）')
             commits[new_sha] = info
     # 2. 对每个 commit 找编号
@@ -78,7 +77,9 @@ def link_context(state: ArchaeologyState) -> dict:
                     for ref in item['refs']: # 下一跳的pr编号
                         if ref in seen:
                             continue
+                        seen.add(ref)
                         sub = fetch_ref(owner, repo, ref, sha,via_pr=number)
-                        issues_list.append(sub)
+                        if sub:
+                            issues_list.append(sub)
 
     return {'issues': issues_list,'commits': list(commits.values())}
