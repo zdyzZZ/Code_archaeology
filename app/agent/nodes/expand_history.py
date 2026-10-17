@@ -22,7 +22,9 @@ def expand_history(state: ArchaeologyState) -> dict:
     end_line = state['end_line']
     out = line_history(repo_path,file_path,start_line,end_line)
     seen = set(i['sha'] for i in state['commits'])
-    new_shas = [h['sha'] for h in out if h['sha'] not in seen][:3]
-    print('[expand_history] depth %d -> %d, new_shas=%s'
-          % (state['depth'], state['depth'] + 1, [s[:8] for s in new_shas]))
+    for i in state['skipped']:
+        if i['sha'] not in seen:
+            seen.add(i['sha'])
+    new_shas = [h['sha'] for h in out if h['sha'] not in seen]
+    print(f"[expand_history] depth {state['depth']} -> {state['depth'] + 1}")
     return {'new_shas':new_shas,'depth':state['depth']+1}

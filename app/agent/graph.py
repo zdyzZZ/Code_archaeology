@@ -24,6 +24,7 @@
 """
 from langgraph.types import Command
 
+from app.agent.nodes.filter_noise import filter_noise
 from app.agent.state import ArchaeologyState
 from langgraph.graph import StateGraph,START,END
 from app.agent.nodes.parse_target import parse_target
@@ -58,12 +59,14 @@ def build_graph() -> CompiledStateGraph:
     graph.add_node('narrate', narrate)
     graph.add_node('expand_history', expand_history)
     graph.add_node('assess', assess)
+    graph.add_node('filter_noise', filter_noise)
     graph.add_edge(START,'parse_target')
     graph.add_edge('parse_target', 'blame')
-    graph.add_edge('blame', 'link_context')
+    graph.add_edge('blame', 'filter_noise')
+    graph.add_edge('filter_noise', 'link_context')
     graph.add_edge('link_context', 'assess')
     graph.add_conditional_edges('assess',router, ['narrate', 'expand_history'])
-    graph.add_edge('expand_history', 'link_context')
+    graph.add_edge('expand_history', 'filter_noise')
     graph.add_edge('narrate',END)
 
     return graph.compile()

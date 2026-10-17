@@ -50,7 +50,15 @@ def build_material(state: ArchaeologyState) -> str:
             commit_text.append(f"#### #{i['number']} ({kind}) {i['title']} {source}")
             commit_text.append(f"正文：{i['body'][:4000]}")
     parts = [human_str, '\n'.join(blame_text), '\n'.join(commit_text)]
-
+    if state.get('skipped'):
+        skip_list = ['## 已跳过的提交(格式化等，不是原因)']
+        for skip_dic in state['skipped']:
+            skip_reason = (
+                f'{skip_dic["sha"][:8]}  '
+                f'{skip_dic["summary"]}——{skip_dic["reason"]}'
+            )
+            skip_list.append(skip_reason)
+        parts.append('\n'.join(skip_list))
     if state.get('stop_reason') in ['循环次数达到上限','无更多历史提交']:
         stop_reason = f'## 停止原因:{state["stop_reason"]}\n仍然缺少:{state.get("missing")}'
         parts.append(stop_reason)

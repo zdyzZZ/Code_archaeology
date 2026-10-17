@@ -33,9 +33,29 @@ class AssessResult(BaseModel):
 def assess(state: ArchaeologyState) -> dict:
     """TODO"""
     max_depth = settings.max_depth
-    if not state['new_shas']:
+    skipped = state['skipped']
+    blame_lines = state['blame_lines']
+    # 第 0 层只要 blame 里有指向噪声提交的行
+    need_expand_history = []
+    if state["depth"] == 0:
+        skipped_shas = {item["sha"] for item in skipped}
+        need_expand_history.extend(
+            dict.fromkeys(
+                item["sha"]
+                for item in blame_lines
+                if item["sha"] in skipped_shas
+            )
+        )
+        if len(need_expand_history) > 0:
+            print(f'-------有{len(need_expand_history)}个噪声提交覆盖了目标行，需要更早的历史-------')
+            return {'enough': False,'missing':'指向噪声提交，需要更早的历史'}
+
+    if not state['new_shas'] and state['depth'] > 0:
         print(f'-------无更多提交历史-------')
         return {'enough': True, 'missing': '没有更早的历史了','stop_reason':'无更多历史提交'}
+    if not state['new_shas'] and state['depth'] == 0:
+        print(f'-------全部都是噪声提交-------')
+        return {'enough': False}
     if state['depth'] >= max_depth:
         print('-------循环次数达到上限-------')
         return {'enough':True,'stop_reason':'循环次数达到上限'}

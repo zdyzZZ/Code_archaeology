@@ -27,3 +27,6 @@ GitPython
 httpx
 
 python-dotenv
+
+# --- 测试 ---
+pytest

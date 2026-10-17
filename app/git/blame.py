@@ -56,15 +56,54 @@ def blame(repo: Path, file_path: str, start: int, end: int) -> list[dict]:
     return result
 
 
-def is_noise_commit(repo: Path, sha: str) -> bool:
-    """判断一个 commit 是不是格式化/lint 之类的噪声提交。
+def is_noise_commit(repo: Path, sha: str) -> str | None:
+    """判断一个 commit 是不是格式化/lint 之类的噪声提交。"""
+    # merge提交父提交 > 1 个直接返回 `None`
+    title_out = run(['git','rev-list','--parents','-n','1',sha], cwd=repo)
+    if len(title_out.split(' ')) > 2:
+        return None
+    # 提交的标题开头包含对应的字符串，判断为噪声跳过
+    title_out = run(['git', 'log', '-1', '--format=%s',sha], cwd=repo).strip().lower()
+    matched = next(
+        (word for word in NOISE_PREFIXES if title_out.startswith(word.lower())),
+        None
+    )
+    if matched is None and "formatting" in title_out:
+        matched = "formatting"
+    if matched:
+        return f'提交说明包含{matched}'
 
-    TODO 启发式，需要拿真实仓库调阈值：
-      - [ ] git show --stat 看改动文件数与行数
-      - [ ] git show -w 看忽略空白后是否还有变化
-      - [ ] commit message 命中 NOISE_PREFIXES
-    """
-    raise NotImplementedError
+    # 忽略空白
+    title_out = run(['git','show','-w','--format=',sha], cwd=repo)
+    if title_out.strip() == '':
+        return '忽略空白后没有实际改动'
+
+    # 批量lint
+    title_out = run(['git', 'show', '--numstat', '--format=', sha], cwd=repo)
+    file_count = 0
+    total_changes = 0
+    for text in title_out.splitlines():
+        cols = text.split("\t", 2)
+        if len(cols) != 3:
+            continue
+        added, deleted, file_path = cols
+        # 二进制文件的增删行数可能是 "-"
+        if not added.isdigit() or not deleted.isdigit():
+            continue
+        file_count += 1
+        total_changes += int(added) + int(deleted)
+    if file_count >= 15:
+        avg_changes = total_changes / file_count
+        if avg_changes <= 10:
+            return (
+                f"疑似批量机械修改："
+                f"修改 {file_count} 个文件，"
+                f"平均每文件改动 {avg_changes:.1f} 行"
+            )
+    return None
+
+
+
 
 
 def blame_through(repo: Path, file_path: str, start: int, end: int,
@@ -79,4 +118,4 @@ def blame_through(repo: Path, file_path: str, start: int, end: int,
     raise NotImplementedError
 
 
-blame(repo=r'D:\Code Archaeologist\Code_archaeology',file_path=r'app\config.py',start=1,end=10)
+# blame(repo=r'D:\Code Archaeologist\Code_archaeology',file_path=r'app\config.py',start=1,end=10)
