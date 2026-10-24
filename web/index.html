@@ -5,56 +5,272 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>代码考古学家</title>
 <style>
-  :root { --ink:#16211e; --muted:#6b7a76; --line:#dde2df; --accent:#0d5a4e; --bg:#f7f8f7; }
+  :root {
+    --ink:#16211e; --muted:#6b7a76; --line:#dde2df; --accent:#0d5a4e; --accent-soft:#e6f0ed;
+    --bg:#f7f8f7; --card:#fff; --warn:#8a5a00; --warn-soft:#fdf4e3; --err:#a3302a; --err-soft:#fbeceb;
+    --code:#eef1ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:#e3e9e7; --muted:#93a29e; --line:#2c3633; --accent:#5fbfa9; --accent-soft:#1b2e2a;
+      --bg:#121817; --card:#182120; --warn:#e3b55c; --warn-soft:#2c2416; --err:#ef8a83; --err-soft:#311c1b;
+      --code:#202b29;
+    }
+  }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink);
          font:15px/1.7 "Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
   .wrap { max-width:900px; margin:0 auto; padding:48px 20px 80px; }
+  header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
   h1 { font-size:30px; margin:0 0 8px; }
   .sub { color:var(--muted); margin:0 0 32px; }
+  .badge { font-size:12px; padding:3px 10px; border-radius:999px; background:var(--warn-soft);
+           color:var(--warn); white-space:nowrap; margin-top:10px; }
+  .badge[hidden] { display:none; }
+
+  form { display:grid; gap:10px; }
   .bar { display:flex; gap:10px; }
-  input { flex:1; padding:11px 14px; border:1px solid var(--line); border-radius:8px;
-          font-size:14px; font-family:inherit; }
+  input { flex:1; min-width:0; padding:11px 14px; border:1px solid var(--line); border-radius:8px;
+          font-size:14px; font-family:inherit; background:var(--card); color:var(--ink); }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
   button { padding:11px 22px; border:0; border-radius:8px; background:var(--accent);
-           color:#fff; font-size:14px; cursor:pointer; font-family:inherit; }
+           color:#fff; font-size:14px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+  @media (prefers-color-scheme: dark) { button { color:#0e1a17; } }
   button:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+
   h2 { font-size:14px; color:var(--muted); font-weight:600; margin:36px 0 12px; }
   .samples { display:grid; gap:8px; }
-  .samples button { background:#fff; color:var(--ink); border:1px solid var(--line);
-                    text-align:left; padding:12px 14px; font-size:13.5px; }
-  .samples button:hover { border-color:var(--accent); }
-  #log { margin-top:28px; }
-  .step { background:#fff; border:1px solid var(--line); border-left:3px solid var(--accent);
-          padding:10px 14px; margin-bottom:8px; font-size:13.5px; }
-  .empty { color:var(--muted); font-style:italic; }
+  .sample { display:block; width:100%; background:var(--card); color:var(--ink);
+            border:1px solid var(--line); text-align:left; padding:12px 14px; font-size:13.5px;
+            white-space:normal; }
+  .sample:hover:not(:disabled) { border-color:var(--accent); }
+  .sample b { display:block; font-weight:600; }
+  .sample span { color:var(--muted); font-size:12.5px; }
+
+  #run { margin-top:28px; }
+  .layer { font-size:12.5px; color:var(--muted); margin:18px 0 8px; display:flex; align-items:center; gap:10px; }
+  .layer::after { content:""; flex:1; border-top:1px dashed var(--line); }
+  .step { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
+          border-radius:6px; padding:10px 14px; margin-bottom:8px; font-size:13.5px; }
+  .step .title { font-weight:600; }
+  .step ul { margin:4px 0 0; padding-left:18px; color:var(--muted); }
+  .step li { word-break:break-word; }
+  .step.pending { border-left-color:var(--line); color:var(--muted); }
+  .dots::after { content:"…"; animation:blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity:.2; } }
+
+  .notice { border-radius:8px; padding:14px 16px; margin:12px 0; font-size:14px; }
+  .notice.ask { background:var(--warn-soft); border:1px solid var(--warn); }
+  .notice.err { background:var(--err-soft); border:1px solid var(--err); color:var(--err); }
+  .notice .actions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+
+  .report { background:var(--card); border:1px solid var(--line); border-radius:10px;
+            padding:6px 22px 18px; margin-top:20px; }
+  .report h3 { font-size:16px; margin:18px 0 6px; }
+  .report code { background:var(--code); padding:1px 5px; border-radius:4px; font-size:13px; }
+  .report blockquote { margin:12px 0; padding:2px 12px; border-left:3px solid var(--line); color:var(--muted); }
+  .report li { margin:4px 0; }
+  .meta { color:var(--muted); font-size:12.5px; margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+  .meta ul { margin:4px 0 0; padding-left:18px; }
+
+  @media (max-width:560px) {
+    .wrap { padding:28px 16px 60px; }
+    h1 { font-size:24px; }
+    .bar { flex-direction:column; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>代码考古学家</h1>
-  <p class="sub">GitLens 告诉你这行是谁改的。这个告诉你——为什么。</p>
+  <header>
+    <div>
+      <h1>代码考古学家</h1>
+      <p class="sub">GitLens 告诉你这行是谁改的。这个告诉你——为什么。</p>
+    </div>
+    <span class="badge" id="mode" hidden title="接口返回的是预先写好的假数据">演示模式</span>
+  </header>
 
-  <div class="bar">
-    <input id="url" placeholder="粘贴 GitHub 文件链接，例如 .../blob/main/src/foo.py#L42-L60">
-    <button id="go">开始考古</button>
-  </div>
+  <form id="form">
+    <div class="bar">
+      <input id="url" required placeholder="粘贴 GitHub 文件链接，例如 .../blob/main/src/foo.py#L42-L60">
+      <button id="go" type="submit">开始考古</button>
+    </div>
+    <input id="question" placeholder="（可选）想问什么？例如：这个判断能删吗">
+  </form>
 
-  <h2>没有现成链接？试试这些经典案例</h2>
-  <div class="samples" id="samples">
-    <!-- TODO: 从 /api/samples 拉取。挑那些带 "don't remove this, see #1234" 注释的著名片段 -->
-    <p class="empty">TODO：内置 6–8 个知名开源项目里的"怪代码"，一键试跑</p>
-  </div>
+  <h2>没有现成链接？试试这些案例</h2>
+  <div class="samples" id="samples"><p class="sub">加载中…</p></div>
 
-  <div id="log"></div>
+  <div id="run"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script>
-// TODO: 接 /api/excavate/stream 的 SSE，把 Agent 每一步渲染成 .step
-// 让访客看见它在想什么 —— 这是演示效果的关键
-document.getElementById('go').onclick = () => {
-  const log = document.getElementById('log');
-  log.innerHTML = '<div class="step">TODO：接上 SSE 流</div>';
+const $ = (id) => document.getElementById(id);
+const runEl = $('run');
+let es = null;          // 当前的 EventSource
+let pending = null;     // "正在进行"的占位卡片
+let lastDepth = -1;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function setBusy(busy) {
+  $('go').disabled = busy;
+  document.querySelectorAll('.sample').forEach(b => b.disabled = busy);
+}
+
+function showPending(text) {
+  if (pending) pending.remove();
+  pending = el('div', 'step pending');
+  pending.append(el('span', 'dots', text));
+  runEl.append(pending);
+}
+
+function clearPending() { if (pending) { pending.remove(); pending = null; } }
+
+function addStep(d) {
+  clearPending();
+  if (d.depth !== lastDepth && d.node !== 'parse_target') {
+    lastDepth = d.depth;
+    runEl.append(el('div', 'layer', '第 ' + d.depth + ' 层'));
+  }
+  const card = el('div', 'step');
+  card.append(el('div', 'title', d.title));
+  if (d.lines && d.lines.length) {
+    const ul = el('ul');
+    d.lines.forEach(t => ul.append(el('li', null, t)));
+    card.append(ul);
+  }
+  runEl.append(card);
+  showPending('下一步进行中');
+}
+
+function addError(msg) {
+  clearPending();
+  runEl.append(el('div', 'notice err', msg));
+}
+
+function renderMarkdown(md) {
+  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(md));
+  const pre = el('pre', null, md);           // CDN 没加载成功时，退回纯文本
+  pre.style.whiteSpace = 'pre-wrap';
+  return pre.outerHTML;
+}
+
+function addReport(d) {
+  clearPending();
+  const box = el('div', 'report');
+  box.innerHTML = renderMarkdown(d.markdown || '');
+  const meta = el('div', 'meta');
+  meta.append(el('div', null,
+    '挖到第 ' + d.depth + ' 层 · 停止原因：' + (d.stop_reason || '—') +
+    ' · 提交 ' + d.commits + ' 个 · issue/PR ' + d.issues + ' 个'));
+  if (d.skipped && d.skipped.length) {
+    meta.append(el('div', null, '已跳过的噪声提交：'));
+    const ul = el('ul');
+    d.skipped.forEach(s => ul.append(el('li', null, s.sha + ' ' + s.summary + ' —— ' + s.reason)));
+    meta.append(ul);
+  }
+  box.append(meta);
+  runEl.append(box);
+}
+
+function addInterrupt(d) {
+  clearPending();
+  const box = el('div', 'notice ask');
+  box.append(el('div', null, '已经挖到第 ' + d.depth + ' 层，证据还不够。'));
+  if (d.missing) box.append(el('div', null, '还缺：' + d.missing));
+  const actions = el('div', 'actions');
+  const yes = el('button', null, '继续深挖');
+  const no = el('button', 'ghost', '就到这里，生成报告');
+  const choose = (approve) => {
+    yes.disabled = no.disabled = true;
+    box.append(el('div', null, approve ? '→ 你选择了继续深挖' : '→ 你选择了停止'));
+    listen('/api/resume/stream?' + new URLSearchParams({ thread_id: d.thread_id, approve }));
+  };
+  yes.onclick = () => choose(true);
+  no.onclick = () => choose(false);
+  actions.append(yes, no);
+  box.append(actions);
+  runEl.append(box);
+}
+
+function listen(path) {
+  if (es) es.close();
+  setBusy(true);
+  showPending('正在连接');
+  let finished = false;
+  let paused = false;
+  es = new EventSource(path);
+  const on = (name, fn) => es.addEventListener(name, (e) => fn(JSON.parse(e.data)));
+
+  on('start', () => showPending('开始考古'));
+  on('step', addStep);
+  on('report', addReport);
+  on('fail', (d) => addError(d.message));
+  on('interrupt', (d) => { paused = true; addInterrupt(d); });
+  on('done', () => {
+    finished = true;
+    es.close();
+    clearPending();
+    if (!paused) setBusy(false);   // 等用户选择时，保持按钮禁用
+  });
+  // 连接意外断开时，浏览器默认会自动重连，等于把整个考古重跑一遍，所以直接关掉
+  es.onerror = () => {
+    if (finished) return;
+    es.close();
+    addError('连接中断了。请看一下运行 uvicorn 的终端里有没有报错。');
+    setBusy(false);
+  };
+}
+
+function start(url, question) {
+  runEl.innerHTML = '';
+  lastDepth = -1;
+  const params = { url };
+  if (question) params.question = question;
+  listen('/api/excavate/stream?' + new URLSearchParams(params));
+}
+
+$('form').onsubmit = (e) => {
+  e.preventDefault();
+  start($('url').value.trim(), $('question').value.trim());
 };
+
+async function loadSamples() {
+  const box = $('samples');
+  try {
+    const [meta, data] = await Promise.all([
+      fetch('/api/meta').then(r => r.json()),
+      fetch('/api/samples').then(r => r.json()),
+    ]);
+    $('mode').hidden = !meta.fake_agent;
+    box.innerHTML = '';
+    data.samples.forEach(s => {
+      const b = el('button', 'sample');
+      b.type = 'button';
+      b.append(el('b', null, s.title));
+      b.append(el('span', null, s.hint));
+      b.onclick = () => {
+        $('url').value = s.url;
+        $('question').value = s.question || '';
+        start(s.url, s.question);
+      };
+      box.append(b);
+    });
+  } catch (err) {
+    box.innerHTML = '';
+    box.append(el('p', 'sub', '示例加载失败：' + err));
+  }
+}
+loadSamples();
 </script>
 </body>
 </html>

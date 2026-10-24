@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     max_tokens_per_run: int = 120_000
     cache_dir: Path = ROOT / 'data'
 
+    # 演示模式：接口改用 app/agent/fake_stream.py 的假数据，不碰 git / GitHub / LLM
+    # 用于开发网页；graph.astream 写好后关掉
+    fake_agent: bool = False
+
     @property
     def repos_dir(self) -> Path:
         return self.cache_dir / 'repos'
