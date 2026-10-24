@@ -43,7 +43,7 @@ class ArchaeologyState(TypedDict, total=False):
     # ---assess(评估)---
     enough: bool  # assess 写入：材料够不够
     missing: str  # assess 写入：还缺什么（给日志和下一轮参考）
-    stop_reason: Literal['无更多历史提交','循环次数达到上限','模型判断证据足够'] | None
+    stop_reason: Literal['无更多历史提交','循环次数达到上限,证据不足','人工停止','循环次数达到设定上限'] | None
     skipped: Annotated[list[dict], operator.add] # {sha, summary, reason} 噪声
     # --- blame 阶段 ---
     # TODO: blame 结果、被判为噪声而跳过的 commit
@@ -60,6 +60,7 @@ class ArchaeologyState(TypedDict, total=False):
     # --- 控制 ---
     # TODO: depth / tokens_used / needs_human
     depth: int
+    max_depth: int
     # --- 输出 ---
     # TODO: 时间线、结论
     report: str

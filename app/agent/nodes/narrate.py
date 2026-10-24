@@ -59,8 +59,11 @@ def build_material(state: ArchaeologyState) -> str:
             )
             skip_list.append(skip_reason)
         parts.append('\n'.join(skip_list))
-    if state.get('stop_reason') in ['循环次数达到上限','无更多历史提交']:
+    if state.get('stop_reason') in ['无更多历史提交','循环次数达到设定上限']:
         stop_reason = f'## 停止原因:{state["stop_reason"]}\n仍然缺少:{state.get("missing")}'
+        parts.append(stop_reason)
+    elif state.get('stop_reason') == '人工停止':
+        stop_reason = f'## 分析在第{state["depth"]}层停止\n仍然缺少:{state.get("missing")}'
         parts.append(stop_reason)
     if state['question']:
         parts.insert(0, f"## 用户想知道\n{state['question']}")

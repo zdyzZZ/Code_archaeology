@@ -32,7 +32,7 @@ class AssessResult(BaseModel):
 
 def assess(state: ArchaeologyState) -> dict:
     """TODO"""
-    max_depth = settings.max_depth
+    max_depth = state['max_depth']
     skipped = state['skipped']
     blame_lines = state['blame_lines']
     # 第 0 层只要 blame 里有指向噪声提交的行
@@ -56,12 +56,13 @@ def assess(state: ArchaeologyState) -> dict:
     if not state['new_shas'] and state['depth'] == 0:
         print(f'-------全部都是噪声提交-------')
         return {'enough': False}
-    if state['depth'] >= max_depth:
-        print('-------循环次数达到上限-------')
-        return {'enough':True,'stop_reason':'循环次数达到上限'}
+
     llm = get_llm()
     human_message = build_material(state)
     structured_llm = llm.with_structured_output(AssessResult)
     result = structured_llm.invoke([('system',SYSTEM_PROMPT),('human',human_message)])
     print(f'-------模型判断证据是否足够:{result.enough}，原因:{result.missing}-------')
+    if state['depth'] >= max_depth and not result.enough:
+        print('-------循环次数达到上限,证据不足-------')
+        return {'enough':False,'stop_reason':'循环次数达到上限,证据不足','missing':result.missing}
     return {'enough':result.enough,'missing':result.missing, "stop_reason": "模型判断证据足够" if result.enough else None}
