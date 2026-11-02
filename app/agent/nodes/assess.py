@@ -17,7 +17,7 @@
 """
 from app.agent.state import ArchaeologyState
 from app.config import settings
-from app.agent.llm import get_llm
+from app.agent.llm import get_llm, language_rule
 from pathlib import Path
 from app.agent.nodes.narrate import build_material
 from pydantic import BaseModel, Field
@@ -60,7 +60,9 @@ def assess(state: ArchaeologyState) -> dict:
     llm = get_llm()
     human_message = build_material(state)
     structured_llm = llm.with_structured_output(AssessResult)
-    result = structured_llm.invoke([('system',SYSTEM_PROMPT),('human',human_message)])
+    # missing 会显示在网页的中断提示里，也要按用户选的语言写
+    system = SYSTEM_PROMPT + '\n\n' + language_rule(state.get('language'))
+    result = structured_llm.invoke([('system',system),('human',human_message)])
     print(f'-------模型判断证据是否足够:{result.enough}，原因:{result.missing}-------')
     if state['depth'] >= max_depth and not result.enough:
         print('-------循环次数达到上限,证据不足-------')

@@ -31,6 +31,7 @@ class ArchaeologyState(TypedDict, total=False):
     # TODO: repo / file_path / line_range / question
     url: str
     question: str
+    language: str      # 报告语言 'zh' / 'en'，网页上选；narrate 和 assess 的提示词按它指定输出语言
     # ---parse_target---
     owner: str
     repo: str
@@ -54,8 +55,9 @@ class ArchaeologyState(TypedDict, total=False):
     # --- 关联上下文 ---
     # TODO: 抽到的 issue / PR 编号及其内容（需要 Reducer？）
     issues: Annotated[list[dict],operator.add]
-    # --- 检索 ---
-    # TODO: 检索命中的片段
+    # --- 检索（v5，retrieve 节点写入；只在最后检索一次，所以是覆盖语义） ---
+    retrieved: list[dict]        # [{id, kind, source, text, number, url, found_by, rerank_score}]
+    retrieval_stats: dict        # {mode, corpus, comments, selected}，给日志和网页看
 
     # --- 控制 ---
     # TODO: depth / tokens_used / needs_human

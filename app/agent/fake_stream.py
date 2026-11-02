@@ -192,7 +192,8 @@ async def _play(steps: list[dict]):
         yield chunk
 
 
-async def astream(url: str, question: str | None, thread_id: str):
+async def astream(url: str, question: str | None, thread_id: str, language: str = 'zh'):
+    # 演示数据是预先写好的中文报告，language 只是为了和真实的 astream 签名一致
     target = _target(url)
     if target['file_path'].endswith('utils.py'):
         _threads[thread_id] = 'utils'

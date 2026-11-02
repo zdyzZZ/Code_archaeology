@@ -18,6 +18,7 @@ TODO（v6 部署前）：
 import inspect
 import json
 import uuid
+from typing import Literal
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter
@@ -48,6 +49,7 @@ NODE_TITLES = {
     'link_context': '拉取关联的 issue / PR',
     'assess': '判断证据够不够',
     'expand_history': '往更早的历史挖一层',
+    'retrieve': '检索最相关的讨论片段',
     'narrate': '生成考古报告',
 }
 
@@ -89,6 +91,14 @@ def _describe(node: str, update: dict) -> list[str]:
         return ['还不够' + ('：%s' % u['missing'] if u.get('missing') else '')]
     if node == 'expand_history':
         return ['进入第 %s 层，候选提交 %d 个' % (u.get('depth'), len(u.get('new_shas') or []))]
+    if node == 'retrieve':
+        st = u.get('retrieval_stats') or {}
+        if st.get('mode') == 'off':
+            return ['未开启检索（retrieval_mode=off）']
+        lines = ['%s 条评论，切成 %s 段 → 选出 %s 段（模式：%s）' % (
+            st.get('comments', '?'), st.get('corpus', '?'), st.get('selected', '?'), st.get('mode', ''))]
+        lines += ['%s：%s' % (r.get('source', ''), _first_line(r.get('text'))[:60]) for r in (u.get('retrieved') or [])[:5]]
+        return lines
     if node == 'narrate':
         return ['报告已生成']
     return ['更新了：%s' % '、'.join(u.keys())] if u else []
@@ -151,11 +161,15 @@ async def meta():
     return {'fake_agent': settings.fake_agent}
 
 
+Lang = Literal['zh', 'en']   # 报告语言；其他值 FastAPI 直接返回 422
+
+
 @router.get('/excavate/stream')
-async def excavate_stream(url: str, question: str | None = None):
+async def excavate_stream(url: str, question: str | None = None, lang: Lang = 'zh'):
     """SSE 流式版：把 Agent 每一步推给前端。"""
     thread_id = uuid.uuid4().hex
-    return EventSourceResponse(_run_stream('astream', (url, question or None, thread_id), thread_id, start=True))
+    return EventSourceResponse(_run_stream('astream', (url, question or None, thread_id), thread_id, start=True,
+                                           kwargs={'language': lang}))
 
 
 @router.get('/resume/stream')
@@ -167,7 +181,7 @@ async def resume_stream(thread_id: str, approve: bool):
 HINT_FAKE = '还没写好的话，可以先在 .env 里设置 FAKE_AGENT=true 用演示模式。'
 
 
-async def _run_stream(func_name: str, args: tuple, thread_id: str, start: bool = False):
+async def _run_stream(func_name: str, args: tuple, thread_id: str, start: bool = False, kwargs: dict | None = None):
     """调用 graph 的 astream / aresume，检查它是否符合约定，再交给 _translate。
 
     graph 还没写好、签名不对时，用 error 事件告诉网页，而不是让 SSE 连接直接断掉
@@ -181,7 +195,7 @@ async def _run_stream(func_name: str, args: tuple, thread_id: str, start: bool =
         yield _event('done', {})
         return
     try:
-        chunks = func(*args)
+        chunks = func(*args, **(kwargs or {}))
     except TypeError as e:
         yield _event('fail', {'message': 'graph.%s 的参数和约定不一致：%s' % (func_name, e)})
         yield _event('done', {})
@@ -200,6 +214,7 @@ async def _run_stream(func_name: str, args: tuple, thread_id: str, start: bool =
 class ExcavateRequest(BaseModel):
     url: str                      # GitHub 文件链接，可带 #L12-L30
     question: str | None = None   # 可选：具体想问什么
+    lang: Lang = 'zh'             # 报告语言
 
 
 @router.post('/excavate')
@@ -208,14 +223,14 @@ async def excavate(req: ExcavateRequest):
     if settings.fake_agent:
         thread_id = uuid.uuid4().hex
         result: dict = {}
-        async for chunk in _agent().astream(req.url, req.question, thread_id):
+        async for chunk in _agent().astream(req.url, req.question, thread_id, language=req.lang):
             if '__interrupt__' in chunk:
                 return {'interrupted': True, 'thread_id': thread_id, **_interrupt_value(chunk)}
             for update in chunk.values():
                 result.update(update)
     else:
         from app.agent.graph import run
-        result = await run_in_threadpool(run, req.url, req.question)
+        result = await run_in_threadpool(run, req.url, req.question, req.lang)
         if '__interrupt__' in result:
             return {'interrupted': True, **_interrupt_value(result)}
     return {

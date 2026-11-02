@@ -18,7 +18,7 @@
 
 from app.agent.state import ArchaeologyState
 from pathlib import Path
-from app.agent.llm import get_llm
+from app.agent.llm import get_llm, language_rule
 
 PROMPT = (Path(__file__).parent.parent / 'prompts' / 'narrate.md').read_text(encoding='utf-8')
 
@@ -35,6 +35,11 @@ def build_material(state: ArchaeologyState) -> str:
             f"{blame_line['code']}"
         )
 
+    # v5：检索过（retrieved 非空）时，PR / issue 正文不再整段塞进来，只留标题，
+    # 相关的内容由下面的"相关讨论片段"提供。
+    # 用 .get()：assess 也调用这个函数，那时还没到 retrieve 节点，没有 retrieved
+    retrieved = state.get('retrieved') or []
+
     commit_text = ['## 改动记录（从旧到新）']
     for c in sorted(state['commits'], key=lambda c: c['date']):
         commit_text.append(f"### {c['sha'][:8]}  {c['date']}  {c['author']}")
@@ -48,8 +53,14 @@ def build_material(state: ArchaeologyState) -> str:
             kind = 'PR' if i['is_pr'] else 'issue'
             source = f"（由 PR #{i['via_pr']} 引用）" if i['via_pr'] else ''
             commit_text.append(f"#### #{i['number']} ({kind}) {i['title']} {source}")
-            commit_text.append(f"正文：{i['body'][:4000]}")
+            if not retrieved:
+                commit_text.append(f"正文：{i['body'][:4000]}")
     parts = [human_str, '\n'.join(blame_text), '\n'.join(commit_text)]
+    if retrieved:
+        snippet_text = ['## 相关讨论片段（从 PR / issue 正文和评论里检索得到，按相关性从高到低）']
+        for r in retrieved:
+            snippet_text.append(f"[{r['source']}]\n{r['text']}")
+        parts.append('\n\n'.join(snippet_text))
     if state.get('skipped'):
         skip_list = ['## 已跳过的提交(格式化等，不是原因)']
         for skip_dic in state['skipped']:
@@ -74,5 +85,6 @@ def narrate(state: ArchaeologyState) -> dict:
     print('[narrate] issue 数 =', len(state['issues']))
     llm = get_llm()
     human_material = build_material(state)
-    res = llm.invoke([("system", PROMPT),("human", human_material),])
+    system = PROMPT + "\n\n" + language_rule(state.get("language"))
+    res = llm.invoke([("system", system),("human", human_material),])
     return {'report': res.content}

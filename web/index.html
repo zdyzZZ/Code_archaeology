@@ -30,6 +30,8 @@
 
   form { display:grid; gap:10px; }
   .bar { display:flex; gap:10px; }
+  select { padding:11px 12px; border:1px solid var(--line); border-radius:8px; font-size:14px;
+           font-family:inherit; background:var(--card); color:var(--ink); }
   input { flex:1; min-width:0; padding:11px 14px; border:1px solid var(--line); border-radius:8px;
           font-size:14px; font-family:inherit; background:var(--card); color:var(--ink); }
   input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
@@ -96,7 +98,13 @@
       <input id="url" required placeholder="粘贴 GitHub 文件链接，例如 .../blob/main/src/foo.py#L42-L60">
       <button id="go" type="submit">开始考古</button>
     </div>
-    <input id="question" placeholder="（可选）想问什么？例如：这个判断能删吗">
+    <div class="bar">
+      <input id="question" placeholder="（可选）想问什么？例如：这个判断能删吗">
+      <select id="lang" title="报告用什么语言写">
+        <option value="zh">报告：中文</option>
+        <option value="en">Report: English</option>
+      </select>
+    </div>
   </form>
 
   <h2>没有现成链接？试试这些案例</h2>
@@ -234,7 +242,7 @@ function listen(path) {
 function start(url, question) {
   runEl.innerHTML = '';
   lastDepth = -1;
-  const params = { url };
+  const params = { url, lang: $('lang').value };
   if (question) params.question = question;
   listen('/api/excavate/stream?' + new URLSearchParams(params));
 }
@@ -270,6 +278,13 @@ async function loadSamples() {
     box.append(el('p', 'sub', '示例加载失败：' + err));
   }
 }
+const LANG_KEY = 'code-archaeologist-lang';
+try {
+  const saved = localStorage.getItem(LANG_KEY);
+  if (saved === 'zh' || saved === 'en') $('lang').value = saved;
+} catch (e) {}
+$('lang').onchange = () => { try { localStorage.setItem(LANG_KEY, $('lang').value); } catch (e) {} };
+
 loadSamples();
 </script>
 </body>
