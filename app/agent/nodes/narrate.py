@@ -18,7 +18,16 @@
 
 from app.agent.state import ArchaeologyState
 from pathlib import Path
+from pydantic import BaseModel, Field
 from app.agent.llm import get_llm, language_rule
+
+
+class NarrateResult(BaseModel):
+    report: str = Field(description='完整的考古报告，markdown 格式')
+    key_prs: list[int] = Field(
+        description='引入这几行当前逻辑的 PR 编号（只写数字），最可能的排第一，最多 3 个。'
+                    '只填材料里出现过的 PR；格式化、改类型标注、搬文件这类 PR 不算；找不到就返回空列表')
+
 
 PROMPT = (Path(__file__).parent.parent / 'prompts' / 'narrate.md').read_text(encoding='utf-8')
 
@@ -83,8 +92,11 @@ def build_material(state: ArchaeologyState) -> str:
 
 def narrate(state: ArchaeologyState) -> dict:
     print('[narrate] issue 数 =', len(state['issues']))
-    llm = get_llm()
+    llm = get_llm().with_structured_output(NarrateResult)
     human_material = build_material(state)
     system = PROMPT + "\n\n" + language_rule(state.get("language"))
-    res = llm.invoke([("system", system),("human", human_material),])
-    return {'report': res.content}
+    res = llm.invoke([("system", system), ("human", human_material)])
+    # 去重并保持顺序；模型偶尔会把同一个编号写两遍
+    key_prs = list(dict.fromkeys(res.key_prs))[:3]
+    print('[narrate] key_prs =', key_prs)
+    return {'report': res.report, 'key_prs': key_prs}

@@ -47,11 +47,15 @@ def test_narrate把语言要求放进系统提示词(monkeypatch):
     captured = {}
 
     class FakeLLM:
+        def with_structured_output(self, schema):
+            return self
+
         def invoke(self, messages):
             captured['system'] = messages[0][1]
-            return type('R', (), {'content': 'report'})()
+            return narrate_node.NarrateResult(report='report', key_prs=[12, 12, 5, 7, 9])
 
     monkeypatch.setattr(narrate_node, 'get_llm', lambda: FakeLLM())
     monkeypatch.setattr(narrate_node, 'build_material', lambda state: 'material')
-    narrate_node.narrate({'issues': [], 'language': 'en'})
+    out = narrate_node.narrate({'issues': [], 'language': 'en'})
     assert captured['system'].endswith(LANGUAGE_RULES['en'])
+    assert out == {'report': 'report', 'key_prs': [12, 5, 7]}   # 去重、最多 3 个

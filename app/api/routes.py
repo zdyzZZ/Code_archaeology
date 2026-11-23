@@ -145,7 +145,8 @@ async def _translate(chunks: AsyncIterator[dict], thread_id: str) -> AsyncIterat
                 yield _event('step', {'node': node, 'title': NODE_TITLES.get(node, node),
                                       'lines': _describe(node, update), 'depth': summary['depth']})
                 if node == 'narrate' and update.get('report'):
-                    yield _event('report', {'markdown': update['report'], **summary})
+                    yield _event('report', {'markdown': update['report'],
+                                            'key_prs': update.get('key_prs') or [], **summary})
     except NotImplementedError:
         yield _event('fail', {'message': 'graph.astream / aresume 还没实现。可以先在 .env 里设置 '
                                           'FAKE_AGENT=true，用演示模式查看网页效果。'})
@@ -236,6 +237,7 @@ async def excavate(req: ExcavateRequest):
     return {
         'interrupted': False,
         'report': result.get('report', ''),
+        'key_prs': result.get('key_prs') or [],
         'depth': result.get('depth'),
         'stop_reason': result.get('stop_reason'),
         'skipped': [{'sha': _short(s.get('sha')), 'summary': s.get('summary', ''), 'reason': s.get('reason', '')}

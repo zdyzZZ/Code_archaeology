@@ -16,12 +16,24 @@
    目前用 psf/requests、pytest-dev/pytest、scrapy/scrapy，每个 14 条，共 42 条
 2. **算标准答案**：`git blame -w --ignore-revs-file .git-blame-ignore-revs HEAD` 跳过维护者列出的格式化提交，
    连续 4-15 行都指向同一个提交时，这个提交所属的 PR 就是答案。
-   PR 编号只用本地 git 得到：squash 合并看标题末尾的 `(#123)`，普通合并找之后第一个 "Merge pull request #123"
+   PR 编号用两个独立来源交叉核对，**一致才保留**：
+   - 本地 git：squash 合并看标题末尾的 `(#123)`；普通合并找**真正把它带进来的** "Merge pull request #123"
+     （merge 的第一父提交还不包含它，才算是这个 merge 带进来的）
+   - GitHub：`GET /repos/{o}/{r}/commits/{sha}/pulls` 里已合并的 PR
+   - 只用本地 git 时，第一版 42 条里有 6 条答案是错的：4 条老提交根本没有 PR（之后第一个 merge 是无关的 PR）、
+     1 条 rebase 合并（没有 merge 提交）、1 条标题里的 `(#7940)` 其实是 issue 编号
 3. **为什么不用自己的 `is_noise_commit` 算答案**：那是拿被测的规则出题，自己考自己。维护者的清单和被测代码互相独立
 4. **只保留答案明确的样本**，以下情况丢掉：
    - 落在 docstring 里的行（不是逻辑）
+   - 落在 import 语句里的行，包括多行 import 括号里的名字：格式化前它们挤在同一行，是不同 PR 陆续加进去的，
+     blame 却全算给最后改这一行的 PR
+   - 更一般的同类情况：几行在答案提交里对应**同一个原始行号**（`git blame --porcelain` 给出），说明是格式化把一行拆成了多行
+     （列表、元组、函数参数）。拆分本身不一定有歧义，再用 `git log -L n,n:<当时的路径> <sha>` 看那一行的历史：
+     只有答案提交自己（新写的一行）就保留；更早还有提交改过它（例如往列表里加 / 删一项）就丢掉。
+     第一版基线里 id 3（`__attrs__` 列表）、id 30（扩展名列表）就是这样被误判的。
+     只判断"有没有拆分"会把大部分 penetrate 样本也丢掉（black 经常把一个新写的长调用拆成多行），所以要多这一步
    - 答案提交是 merge 提交（解决冲突时产生，不是逻辑的来源）
-   - 答案提交的标题像搬代码、改名、机械改写、类型标注、文档、chore（逻辑其实在它之前就有，答案有歧义）
+   - 答案提交的标题像搬代码（move / reorder 等）、改名、机械改写、类型标注、文档、chore（逻辑其实在它之前就有，答案有歧义）
 5. **两类样本各一半**：
    - `direct`：普通 blame 就直接指向答案，考"关联 PR、正确引用"
    - `penetrate`：一半以上的行，普通 blame 指向格式化提交，要穿过去才能找到答案，考 v2 的深挖和 v3 的噪声过滤
@@ -51,7 +63,8 @@
 
 ## TODO
 
-- [ ] build_dataset.py：自动构造
-- [ ] run_eval.py：跑对照并出表
+- [x] build_dataset.py：自动构造
+- [x] run_eval.py：跑评测并出表（`python -m evals.run_eval --mode off --limit 3`）
+- [ ] 5 种 retrieval_mode 各跑一遍做对照
 - [ ] 失败案例分析：哪类代码考不出来（提示：squash 合并的仓库、
       commit message 只写 "fix bug" 的仓库）

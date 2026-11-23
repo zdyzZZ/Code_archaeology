@@ -66,4 +66,4 @@ class ArchaeologyState(TypedDict, total=False):
     # --- 输出 ---
     # TODO: 时间线、结论
     report: str
-    ...
+    key_prs: list[int]           # 引入这几行当前逻辑的 PR，最可能的排第一；评测按它算 Top-1 / Top-3

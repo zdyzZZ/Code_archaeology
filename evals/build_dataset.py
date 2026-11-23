@@ -7,6 +7,11 @@
 `git blame --ignore-revs-file` 跳过这些提交后，每行指向的提交就是"引入这几行当前逻辑"的提交，
 它所属的 PR 就是标准答案。
 
+提交 -> PR 用两个独立来源交叉核对，一致才保留（见 PrFinder 和 verify_pr）：
+  - 本地 git：squash 合并看标题末尾的 (#N)；普通合并找真正把它带进来的 "Merge pull request #N"
+  - GitHub：GET /repos/{o}/{r}/commits/{sha}/pulls 里已合并的 PR
+只用本地 git 时，42 条里有 6 条答案是错的：老提交根本没有 PR、rebase 合并、标题里的编号其实是 issue。
+
 为什么不用我们自己的 is_noise_commit 来算答案：那等于拿被测的规则去出题，自己考自己。
 用维护者的清单，答案和被测代码互相独立。
 
@@ -47,7 +52,7 @@ MIN_CODE_LINES = 3                 # 除去空行、注释、import 后至少要
 # 答案有歧义。只保留答案明确的样本，有歧义的留给失败案例分析。
 # 注意这只是出题时的过滤，和被测代码里的 is_noise_commit 互相独立。
 AMBIGUOUS_WORDS = re.compile(
-    r'\b(move|moved|rename|renamed|relocate|reorganiz|restructur|vendor'      # 搬代码、改名
+    r'\b(move|moved|rename|renamed|relocate|reorganiz|restructur|reorder\w*|vendor'  # 搬代码、改名
     r'|format|black|isort|ruff|flake8|pyupgrade|pre-commit|lint|style|whitespace|backslash|f-strings?'
     r'|comprehensions?|clean ?up|typo'  # 机械改写
     r'|type hints?|typing|annotations?|inline types|mypy'                      # 类型标注
@@ -57,14 +62,20 @@ AMBIGUOUS_WORDS = re.compile(
 OUT = Path(__file__).resolve().parent / 'dataset.jsonl'
 
 
-def docstring_lines(source: str) -> set[int]:
-    """文件里所有 docstring 占的行号（从 1 开始）。解析失败时返回空集。"""
+def excluded_lines(source: str) -> set[int]:
+    """不适合出题的行号（从 1 开始）：docstring 和 import 语句。解析失败时返回空集。
+
+    import 语句整段排除，包括多行 import 括号里的名字：格式化前这些名字挤在同一行，
+    是不同 PR 陆续加进去的，blame 却全算给最后一个改这一行的 PR，答案有歧义。
+    """
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return set()
     lines = set()
     for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            lines.update(range(node.lineno, node.end_lineno + 1))
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             body = getattr(node, 'body', [])
             if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], 'value', None), ast.Constant) \
@@ -77,19 +88,60 @@ def git(repo: Path, *args: str) -> str:
     return run(['git', *args], cwd=repo, timeout=300)
 
 
-def blame_shas(repo: Path, path: str, ignore: bool) -> list[tuple[str, str]]:
-    """HEAD 上整个文件的 blame，返回 [(sha, 代码), ...]，下标 i 对应第 i+1 行。"""
+def blame_shas(repo: Path, path: str, ignore: bool) -> list[tuple[str, str, int, str]]:
+    """HEAD 上整个文件的 blame，返回 [(sha, 代码, 原始行号, 原始路径), ...]，下标 i 对应第 i+1 行。
+
+    原始行号 / 原始路径：这一行在 sha 那个版本里是哪个文件的第几行
+    （porcelain 头部 "<sha> <原始行号> <当前行号>"，随后的 "filename <路径>"；文件搬过家时路径不同）。
+    """
     args = ['blame', '-w', '--porcelain']
     if ignore:
         args += ['--ignore-revs-file', IGNORE_FILE]
     out = git(repo, *args, 'HEAD', '--', path)
-    rows, current = [], None
+    rows, current, orig, orig_path = [], None, 0, path
     for line in out.splitlines():
         if line.startswith('\t'):
-            rows.append((current, line[1:]))
-        elif re.match(r'^[0-9a-f]{40} ', line):
-            current = line[:40]
+            rows.append((current, line[1:], orig, orig_path))
+        elif line.startswith('filename '):
+            orig_path = line[len('filename '):]
+        elif re.match(r'^[0-9a-f]{40} \d+ \d+', line):
+            parts = line.split()
+            current, orig = parts[0], int(parts[1])
     return rows
+
+
+class SplitLineChecker:
+    """格式化把一行拆成多行时，答案是否还明确。
+
+    几行对应同一个原始行号，说明格式化前它们是同一行。
+      - 这一行是答案提交新写的 → 答案明确，保留
+      - 这一行在答案提交之前就有、答案提交只是改了它（例如往列表里加 / 删一项）
+        → 这一行是多个 PR 陆续改出来的，blame 却全算给最后一个，答案有歧义，丢掉
+    用 `git log -L n,n:<当时的路径> <sha>` 看这一行的历史：只有 sha 自己 = 新写的。
+    """
+
+    def __init__(self, repo: Path):
+        self.repo = repo
+        self.cache: dict[tuple[str, str, int], bool] = {}
+
+    def has_earlier_history(self, sha: str, path: str, line_no: int) -> bool:
+        key = (sha, path, line_no)
+        if key not in self.cache:
+            try:
+                out = git(self.repo, 'log', '-L', '%d,%d:%s' % (line_no, line_no, path),
+                          '--format=@@COMMIT %H', sha)
+                shas = re.findall(r'^@@COMMIT ([0-9a-f]{40})', out, re.M)
+                self.cache[key] = len(shas) > 1
+            except RuntimeError:
+                self.cache[key] = True     # 查不了就当有歧义：宁可少一条样本，不要错的答案
+        return self.cache[key]
+
+    def ambiguous(self, rows: list[tuple[str, str, int, str]]) -> bool:
+        origins = [(r[2], r[3]) for r in rows]
+        if len(set(origins)) == len(origins):
+            return False                   # 没有拆分
+        shared = {o for o in origins if origins.count(o) > 1}
+        return any(self.has_earlier_history(rows[0][0], p, n) for n, p in shared)
 
 
 def is_code(line: str) -> bool:
@@ -98,7 +150,7 @@ def is_code(line: str) -> bool:
 
 
 class PrFinder:
-    """提交 -> PR 编号，只用本地 git，不调 GitHub API（不占额度）。"""
+    """提交 -> PR 编号（本地 git 的判断）。出题时再用 verify_pr 和 GitHub 交叉核对。"""
 
     def __init__(self, repo: Path):
         self.repo = repo
@@ -107,17 +159,42 @@ class PrFinder:
     def __call__(self, sha: str) -> tuple[int | None, str]:
         if sha not in self.cache:
             title = git(self.repo, 'log', '-1', '--format=%s', sha).strip()
-            # squash 合并：标题末尾带 (#123)
+            # squash 合并：标题末尾带 (#123)。也可能是 issue 编号（"fix foo (#7940)"），所以之后要核对
             m = re.search(r'\(#(\d+)\)\s*$', title)
-            pr = int(m.group(1)) if m else None
-            if pr is None:
-                # 普通合并：这个提交之后第一个把它带进主分支的 merge 提交，标题是 "Merge pull request #123 ..."
-                merges = git(self.repo, 'log', '--merges', '--ancestry-path', '--reverse',
-                             '--format=%s', '%s..HEAD' % sha).splitlines()
-                m = re.match(r'Merge pull request #(\d+)', merges[0]) if merges else None
-                pr = int(m.group(1)) if m else None
+            pr = int(m.group(1)) if m else self._merged_by(sha)
             self.cache[sha] = (pr, title)
         return self.cache[sha]
+
+    def _merged_by(self, sha: str) -> int | None:
+        """真正把 sha 带进来的那个 "Merge pull request #N"。
+
+        之后出现的 merge 不一定是它带进来的：sha 可能早已在主线上（rebase 合并、维护者直接提交），
+        之后的 merge 只是恰好在它的后代里。判据：merge 的第一父提交还不包含 sha，才是它带进来的。
+        "包含 sha" = 是 sha 本身，或在 sha..HEAD 的 ancestry-path 上（一次 rev-list 算出全部，
+        不用对每个 merge 调 merge-base）。
+        """
+        descendants = set(git(self.repo, 'rev-list', '--ancestry-path', '%s..HEAD' % sha).split())
+        descendants.add(sha)
+        merges = git(self.repo, 'log', '--merges', '--ancestry-path', '--reverse',
+                     '--format=%P%x09%s', '%s..HEAD' % sha).splitlines()
+        for line in merges:
+            parents, subject = line.split('\t', 1)
+            if parents.split()[0] not in descendants:
+                m = re.match(r'Merge pull request #(\d+)', subject)
+                return int(m.group(1)) if m else None    # 带进来的是普通分支合并，没有 PR
+        return None
+
+
+def verify_pr(owner: str, name: str, sha: str, pr: int) -> bool:
+    """GitHub 记录的"包含这个提交并已合并的 PR"里有 pr，才算答案可靠。
+
+    本地 git 和 GitHub 是两个独立来源：本地会把标题里的 issue 编号当成 PR、看不到 rebase 合并；
+    GitHub 对 2012 年前的老提交常常查不到。两边一致才保留，不一致或查不到的样本丢掉。
+    只对 pick 选中的候选调用，请求有落盘缓存。
+    """
+    from app.github.client import git_commit_pulls
+    merged = [p['number'] for p in git_commit_pulls(owner, name, sha) if p.get('merged_at')]
+    return pr in merged
 
 
 def candidates(owner: str, name: str, src: str) -> list[dict]:
@@ -130,6 +207,7 @@ def candidates(owner: str, name: str, src: str) -> list[dict]:
     ignored = {l.split()[0] for l in ignore_path.read_text(encoding='utf-8').splitlines()
                if re.match(r'^[0-9a-f]{40}', l)}
     find_pr = PrFinder(repo)
+    split = SplitLineChecker(repo)
     files = [f for f in git(repo, 'ls-files', src).split()
              if f.endswith('.py') and '/tests/' not in f and not f.split('/')[-1].startswith('test_')]
     print('[%s/%s] HEAD=%s，%d 个文件，%d 个格式化提交' % (owner, name, head[:8], len(files), len(ignored)))
@@ -139,7 +217,7 @@ def candidates(owner: str, name: str, src: str) -> list[dict]:
         plain, real = blame_shas(repo, path, False), blame_shas(repo, path, True)
         if len(plain) != len(real):
             continue
-        doc = docstring_lines('\n'.join(code for _, code in real))
+        doc = excluded_lines('\n'.join(r[1] for r in real))
         i = 0
         while i < len(real):
             j = i
@@ -152,7 +230,9 @@ def candidates(owner: str, name: str, src: str) -> list[dict]:
                     and sum(is_code(real[k][1]) for k in block) >= MIN_CODE_LINES):
                 pr, title = find_pr(sha)
                 # merge 提交（解决冲突时）也会被 blame 当成"引入者"，但它不是逻辑的来源
-                if pr and not AMBIGUOUS_WORDS.search(title) and not title.startswith('Merge '):
+                # split.ambiguous 要跑 git log -L，比较慢，放在最后
+                if (pr and not AMBIGUOUS_WORDS.search(title) and not title.startswith('Merge ')
+                        and not split.ambiguous([real[k] for k in block])):
                     noisy = sum(plain[k][0] in ignored for k in block)
                     out.append({
                         'repo': '%s/%s' % (owner, name),
@@ -172,26 +252,43 @@ def candidates(owner: str, name: str, src: str) -> list[dict]:
 
 
 def pick(cands: list[dict], n: int, rng: random.Random) -> list[dict]:
-    """penetrate 和 direct 各取一半；同一个 PR、同一个文件尽量不重复。"""
+    """penetrate 和 direct 各取一半；同一个 PR、同一个文件尽量不重复；答案要通过 verify_pr。"""
     chosen, used_pr, used_file = [], set(), set()
-    for kind, quota in (('penetrate', n // 2), ('direct', n - n // 2)):
-        pool = [c for c in cands if c['kind'] == kind]
-        rng.shuffle(pool)
-        pool.sort(key=lambda c: c['file'] in used_file)   # 稳定排序：没用过的文件排前面
+    checked: dict[str, bool] = {}
+    rejected = []
+
+    def ok(c: dict) -> bool:
+        if c['gold_sha'] not in checked:
+            owner, name = c['repo'].split('/')
+            checked[c['gold_sha']] = verify_pr(owner, name, c['gold_sha'], c['gold_pr'])
+            if not checked[c['gold_sha']]:
+                rejected.append(c)
+        return checked[c['gold_sha']]
+
+    def take(pool: list[dict], quota: int) -> None:
         taken = 0
         for c in pool:
             if taken == quota:
                 break
-            if c['gold_pr'] in used_pr:
+            if c['gold_pr'] in used_pr or not ok(c):
                 continue
             chosen.append(c)
             used_pr.add(c['gold_pr'])
             used_file.add(c['file'])
             taken += 1
+
+    for kind, quota in (('penetrate', n // 2), ('direct', n - n // 2)):
+        pool = [c for c in cands if c['kind'] == kind]
+        rng.shuffle(pool)
+        pool.sort(key=lambda c: c['file'] in used_file)   # 稳定排序：没用过的文件排前面
+        take(pool, quota)
     if len(chosen) < n:   # 某一类不够时，用另一类补
-        rest = [c for c in cands if c not in chosen and c['gold_pr'] not in used_pr]
+        rest = [c for c in cands if c not in chosen]
         rng.shuffle(rest)
-        chosen += rest[:n - len(chosen)]
+        take(rest, n - len(chosen))
+    for c in rejected:
+        print('    丢掉 %s %s：本地判断是 #%d，GitHub 不一致或查不到（%s）' % (
+            c['gold_sha'][:8], c['kind'], c['gold_pr'], c['gold_title'][:50]))
     return chosen
 
 
