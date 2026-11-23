@@ -20,7 +20,11 @@ def ensure_cloned(owner: str, repo: str, ref: str = 'HEAD') -> Path:
     """
     dst = local_path(owner, repo)
     if dst.exists():
-        run(['git', 'fetch', '--quiet'], cwd=dst)
+        # 已有本地副本时 fetch 只是锦上添花：网络不通也能用本地历史 blame
+        try:
+            run(['git', 'fetch', '--quiet'], cwd=dst)
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            print('[repo] fetch %s/%s 失败，使用本地已有副本：%s' % (owner, repo, str(e).splitlines()[-1]))
     else:
         dst.parent.mkdir(parents=True, exist_ok=True)
         run(['git', 'clone', '--quiet',

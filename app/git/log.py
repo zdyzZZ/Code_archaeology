@@ -30,6 +30,10 @@ def line_history(repo: Path, file_path:Path,start:int,end:int) -> list[dict]:
         if not chunk:
             continue
 
+        # merge 提交在 -L 下只有 "@@COMMIT <sha>" 一行、没有 diff；跳过，
+        # link_context 取不到 diff 时会写"未能获取"，而不是空字符串
+        if "\n" not in chunk:
+            continue
         sha, diff = chunk.split("\n", 1)
 
         history.append({
