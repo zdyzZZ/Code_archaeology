@@ -98,12 +98,14 @@ def check_github() -> None:
 
 # ---------- 跑一条 ----------
 
-def run_one(sample: dict) -> dict:
+def run_one(sample: dict, reason: dict | None = None) -> dict:
     from app.agent.graph import GRAPH     # 延迟导入：--summary 不需要加载 graph 和模型
+    from app.agent.nodes.narrate import build_material
 
     config = {'configurable': {'thread_id': uuid.uuid4().hex}, 'recursion_limit': 100}
     start = time.time()
-    GRAPH.invoke({'url': sample['url'], 'question': '', 'max_depth': settings.max_depth,
+    question = reason['question'] if reason else ''
+    GRAPH.invoke({'url': sample['url'], 'question': question, 'max_depth': settings.max_depth,
                   'language': 'zh'}, config=config)
     # 到深度上限还不够时会停在 interrupt_llm；评测没人点按钮，一律选"就到这里"
     interrupts = 0
@@ -133,7 +135,30 @@ def run_one(sample: dict) -> dict:
         'skipped': len(state.get('skipped', [])),
         'seconds': round(seconds, 1),
         'report': state.get('report', ''),
+        # 带问题评测时，理由类指标要看 narrate 实际收到了什么；存下来，改标注后 --rejudge 不用重跑 agent
+        **({'question': question, 'material': build_material(state),
+            'retrieved5': [r.get('text', '') for r in retrieved[:5]]} if reason else {}),
     }
+
+
+def score_reason(record: dict, reason: dict) -> dict:
+    """理由类指标。只用 record 里存下的报告 / 材料 / 检索结果，所以能在改完标注后单独重算。
+
+    ev_in_material  narrate 收到的材料里有没有证据原文：五种模式都能比，off 时能看出截断丢了多少
+    ev_recall5      检索前 5 段里有没有证据原文：只有检索模式才有
+    reason_score    评委判分 0 / 1 / 2；cites_source 有没有标对出处
+    """
+    from evals.judge import judge
+    from evals.reasons import any_quote_found
+    out = {'location': reason['location'], 'reviewed': reason['reviewed'],
+           'ev_in_material': any_quote_found(reason['evidence'], record.get('material', '')),
+           'ev_recall5': (any(any_quote_found(reason['evidence'], t) for t in record.get('retrieved5', []))
+                          if record.get('mode', 'off') != 'off' else None)}
+    try:
+        out.update(judge(record.get('report', ''), reason))
+    except Exception as e:      # 评委失败不连累 agent 的结果；--rejudge 可以补判
+        out.update({'reason_score': None, 'cites_source': None, 'judge_why': '评委出错：%s' % e})
+    return out
 
 
 def failure_stage(r: dict) -> str | None:
@@ -179,6 +204,36 @@ def _brief(r: dict) -> str:
     return str(r.get('key_prs'))
 
 
+def _reason_row(name: str, rs: list[dict]) -> str:
+    judged = [r for r in rs if r.get('reason_score') is not None]
+    n = len(judged)
+    rec = [r['ev_recall5'] for r in rs if r.get('ev_recall5') is not None]
+    cells = [name, str(n),
+             _pct(sum(r['reason_score'] == 2 for r in judged), n),
+             _pct(sum(r['reason_score'] >= 1 for r in judged), n),
+             '%.2f' % (sum(r['reason_score'] for r in judged) / n / 2) if n else '-',
+             _pct(sum(bool(r.get('cites_source')) for r in judged), n),
+             _pct(sum(r.get('ev_in_material', False) for r in rs), len(rs)),
+             _pct(sum(rec), len(rec)) if rec else '-']
+    return '| ' + ' | '.join(cells) + ' |'
+
+
+def reason_table(results: list[dict]) -> list[str]:
+    rs = [r for r in results if 'reason_score' in r and not r.get('error')]
+    lines = ['', '## 理由（带问题运行）', '',
+             '理由得分：评委按 0 没有 / 1 部分 / 2 命中打分，取平均再除以 2。'
+             '证据进材料：narrate 收到的材料里有没有证据原文。未审核的标注 %d 条。'
+             % sum(not r['reviewed'] for r in rs), '',
+             '| 分组 | 样本 | 命中 | 至少部分 | 理由得分 | 出处正确 | 证据进材料 | 证据 Recall@5 |',
+             '|---|---|---|---|---|---|---|---|', _reason_row('全部', rs)]
+    for key in ('kind', 'location'):
+        groups = defaultdict(list)
+        for r in rs:
+            groups[r[key]].append(r)
+        lines += [_reason_row('%s=%s' % (key, k), v) for k, v in sorted(groups.items())]
+    return lines
+
+
 def summarize(mode: str, results: list[dict]) -> str:
     header = ('| 分组 | 样本 | Top-1 | Top-3 | 挖到提交 | 材料含 PR | Recall@5 | 平均深度 | 平均秒数 | 出错 |\n'
               '|---|---|---|---|---|---|---|---|---|---|')
@@ -188,6 +243,9 @@ def summarize(mode: str, results: list[dict]) -> str:
         for r in results:
             groups[r[key]].append(r)
         lines += [_row('%s=%s' % (key, k), v) for k, v in sorted(groups.items())]
+
+    if any('reason_score' in r for r in results):
+        lines += reason_table(results)
 
     misses = [(r, failure_stage(r)) for r in results if failure_stage(r)]
     if misses:
@@ -216,13 +274,36 @@ def main():
     ap.add_argument('--kind', choices=['direct', 'penetrate'])
     ap.add_argument('--rerun', action='store_true', help='已有结果的样本也重跑（默认只重跑出错的）')
     ap.add_argument('--summary', action='store_true', help='不跑，只按已有结果出表')
+    ap.add_argument('--questions', action='store_true',
+                    help='带 evals/reasons.json 里的问题运行，并算理由类指标；结果写到 <mode>-q.*')
+    ap.add_argument('--drafts', action='store_true', help='--questions 时也用未审核的标注（试跑用）')
+    ap.add_argument('--rejudge', action='store_true',
+                    help='不跑 agent，只按最新的标注重算理由类指标（改完标注后用；改了问题要重跑）')
     args = ap.parse_args()
 
     settings.retrieval_mode = args.mode
     RESULTS_DIR.mkdir(exist_ok=True)
-    out_jsonl = RESULTS_DIR / ('%s.jsonl' % args.mode)
+    name = args.mode + ('-q' if args.questions else '')
+    out_jsonl = RESULTS_DIR / ('%s.jsonl' % name)
     samples = load_dataset(args)
+    reasons = {}
+    if args.questions:
+        from evals.reasons import load_reasons
+        reasons = {i: r for i, r in load_reasons().items()
+                   if r['has_reason'] and r['evidence'] and (r['reviewed'] or args.drafts)}
+        samples = [s for s in samples if s['id'] in reasons]
+        if not samples:
+            raise SystemExit('没有可用的标注：先跑 python -m evals.draft_reasons 并审核（或加 --drafts 试跑）')
     done = load_results(out_jsonl)
+
+    if args.rejudge:
+        for s in samples:
+            if s['id'] in done and not done[s['id']].get('error'):
+                print('重新判分 id=%d' % s['id'])
+                done[s['id']].update(score_reason(done[s['id']], reasons[s['id']]))
+        out_jsonl.write_text(''.join(json.dumps(done[k], ensure_ascii=False) + '\n' for k in sorted(done)),
+                             encoding='utf-8')
+        args.summary = True
 
     if not args.summary:
         check_heads(samples)
@@ -237,22 +318,28 @@ def main():
                 n, len(todo), sample['id'], sample['kind'], sample['file'],
                 sample['start'], sample['end'], sample['gold_pr']))
             try:
-                result = run_one(sample)
+                result = run_one(sample, reasons.get(sample['id']))
             except Exception as e:     # 一条失败不影响其它样本
                 traceback.print_exc()
                 result = {'error': '%s: %s' % (type(e).__name__, e)}
             record = {**sample, 'mode': args.mode, **result}
+            if sample['id'] in reasons and not record.get('error'):
+                record.update(score_reason(record, reasons[sample['id']]))
             with out_jsonl.open('a', encoding='utf-8') as f:
                 f.write(json.dumps(record, ensure_ascii=False) + '\n')
             done[sample['id']] = record
             print('-> key_prs=%s top1=%s top3=%s 卡在=%s' % (
                 record.get('key_prs'), record.get('top1'), record.get('top3'), failure_stage(record)))
+            if 'reason_score' in record:
+                print('   理由得分=%s 出处=%s 证据进材料=%s 证据R@5=%s | %s' % (
+                    record['reason_score'], record['cites_source'], record['ev_in_material'],
+                    record['ev_recall5'], record['judge_why']))
 
     results = [done[s['id']] for s in samples if s['id'] in done]
     if not results:
         raise SystemExit('还没有结果：%s' % out_jsonl)
-    table = summarize(args.mode, results)
-    (RESULTS_DIR / ('%s.md' % args.mode)).write_text(table, encoding='utf-8')
+    table = summarize(name, results)
+    (RESULTS_DIR / ('%s.md' % name)).write_text(table, encoding='utf-8')
     print('\n' + table)
 
 

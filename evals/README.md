@@ -38,6 +38,10 @@
    - `direct`：普通 blame 就直接指向答案，考"关联 PR、正确引用"
    - `penetrate`：一半以上的行，普通 blame 指向格式化提交，要穿过去才能找到答案，考 v2 的深挖和 v3 的噪声过滤
 
+6. **抽样要稳定**：候选按 `sha1(种子:仓库:文件:起止行)` 排序后依次取，不用 `random.shuffle`。
+   改过滤规则后候选池少了几条时，只有那几条的名额由后面的补上，其余样本不变，前后两版评测结果才能对比
+   （用 shuffle 时，两版之间只剩 7~8 条相同）
+
 每条样本的字段：`id` `repo` `file` `start` `end` `head`（生成时的 HEAD）`url` `gold_pr` `gold_sha` `gold_title` `kind`。
 
 **注意**：`url` 里带的是生成时的 HEAD。agent 是在本地克隆上 blame 的，跑评测前要确认本地仓库的 HEAD 和 `head` 一致，否则行号会对不上。

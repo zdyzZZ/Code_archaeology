@@ -38,6 +38,9 @@ def blame(repo: Path, file_path: str, start: int, end: int) -> list[dict]:
                 'author': info.get('author', ''),
                 'summary': info.get('summary', ''),
                 'code': line[1:],
+                # 这一行在 sha 那个版本里的位置；git log -L 漏掉 sha 时，link_context 用它取 diff
+                'orig_line': current['orig_line'],
+                'orig_path': current.get('orig_path', file_path),
             })
             continue
         parts = line.split(' ', 1)
@@ -46,8 +49,12 @@ def blame(repo: Path, file_path: str, start: int, end: int) -> list[dict]:
 
         if len(key) == 40 and all(c in '0123456789abcdef' for c in key):
             # 头行：<sha> <原行号> <现行号> [<行数>]
-            current = {'sha': key, 'line': int(value.split()[1])}
+            nums = value.split()
+            current = {'sha': key, 'orig_line': int(nums[0]), 'line': int(nums[1])}
             commits.setdefault(key, {})
+        elif key == 'filename':
+            # 每组都会输出（不像 author 只输出一次）；文件搬过家时是旧路径
+            current['orig_path'] = value
         elif key == 'author':
             commits[current['sha']]['author'] = value
         elif key == 'summary':

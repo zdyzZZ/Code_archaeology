@@ -30,7 +30,7 @@
 import argparse
 import ast
 import json
-import random
+import hashlib
 import re
 from pathlib import Path
 
@@ -54,8 +54,8 @@ MIN_CODE_LINES = 3                 # 除去空行、注释、import 后至少要
 AMBIGUOUS_WORDS = re.compile(
     r'\b(move|moved|rename|renamed|relocate|reorganiz|restructur|reorder\w*|vendor'  # 搬代码、改名
     r'|format|black|isort|ruff|flake8|pyupgrade|pre-commit|lint|style|whitespace|backslash|f-strings?'
-    r'|comprehensions?|clean ?up|typo'  # 机械改写
-    r'|type hints?|typing|annotations?|inline types|mypy'                      # 类型标注
+    r'|comprehensions?|clean ?up|typo|pep ?8\w*'  # 机械改写
+    r'|type hints?|typing|annotat\w*|inline types|mypy'                       # 类型标注
     r'|docs?|docstrings?|documentation|document|clarify'                      # 文档
     r'|chore)\b', re.I)
 
@@ -251,7 +251,19 @@ def candidates(owner: str, name: str, src: str) -> list[dict]:
     return out
 
 
-def pick(cands: list[dict], n: int, rng: random.Random) -> list[dict]:
+def stable_order(c: dict, seed: int) -> str:
+    """每条候选自己的排序键，只由它自己的位置决定。
+
+    以前用 rng.shuffle 打乱整个候选池：过滤规则一改、候选池少一条，后面所有候选的顺序都变，
+    评测集几乎整套换掉（两版之间只剩 7~8 条相同），前后结果没法对比。
+    按哈希排序时，删掉一条候选只会让它原来的名额由下一条补上，其余样本不变。
+    不用内置 hash()：它每次启动进程都随机。
+    """
+    key = '%d:%s:%s:%d:%d' % (seed, c['repo'], c['file'], c['start'], c['end'])
+    return hashlib.sha1(key.encode('utf-8')).hexdigest()
+
+
+def pick(cands: list[dict], n: int, seed: int) -> list[dict]:
     """penetrate 和 direct 各取一半；同一个 PR、同一个文件尽量不重复；答案要通过 verify_pr。"""
     chosen, used_pr, used_file = [], set(), set()
     checked: dict[str, bool] = {}
@@ -278,13 +290,11 @@ def pick(cands: list[dict], n: int, rng: random.Random) -> list[dict]:
             taken += 1
 
     for kind, quota in (('penetrate', n // 2), ('direct', n - n // 2)):
-        pool = [c for c in cands if c['kind'] == kind]
-        rng.shuffle(pool)
+        pool = sorted((c for c in cands if c['kind'] == kind), key=lambda c: stable_order(c, seed))
         pool.sort(key=lambda c: c['file'] in used_file)   # 稳定排序：没用过的文件排前面
         take(pool, quota)
     if len(chosen) < n:   # 某一类不够时，用另一类补
-        rest = [c for c in cands if c not in chosen]
-        rng.shuffle(rest)
+        rest = sorted((c for c in cands if c not in chosen), key=lambda c: stable_order(c, seed))
         take(rest, n - len(chosen))
     for c in rejected:
         print('    丢掉 %s %s：本地判断是 #%d，GitHub 不一致或查不到（%s）' % (
@@ -299,10 +309,9 @@ def main():
     ap.add_argument('--out', type=Path, default=OUT)
     args = ap.parse_args()
 
-    rng = random.Random(args.seed)   # 固定种子：每次生成的评测集一样，前后对比才有意义
     rows = []
     for owner, name, src in REPOS:
-        rows += pick(candidates(owner, name, src), args.per_repo, rng)
+        rows += pick(candidates(owner, name, src), args.per_repo, args.seed)
     for i, r in enumerate(rows, 1):
         r['id'] = i
     with open(args.out, 'w', encoding='utf-8') as f:

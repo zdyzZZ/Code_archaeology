@@ -1,0 +1,950 @@
+[
+  {
+    "id": 1,
+    "repo": "psf/requests",
+    "file": "src/requests/adapters.py",
+    "start": 539,
+    "end": 544,
+    "gold_pr": 4356,
+    "code": "L539              proxy_url = parse_url(proxy)\nL540              if not proxy_url.host:\nL541                  raise InvalidProxyURL(\nL542                      \"Please check proxy URL. It is malformed \"\nL543                      \"and could be missing the host.\"\nL544                  )",
+    "has_reason": true,
+    "question": "这里为什么要在创建代理管理器前检查 `proxy_url.host` 是否为空？",
+    "reason": "代理 URL 即使缺少 `//`，按 RFC 3986 仍可能是合法的 URL，但它没有代理所需的主机；不提前拦截会让下游因主机为 `None` 抛出难以定位的异常。",
+    "location": "commit",
+    "evidence": [
+      {
+        "source": "提交说明",
+        "url": "",
+        "quote": "According to RFC3986, the authority section can be empty for a given URL,\nhowever, for a proxy URL, it shouldn't be. This patch adds a check to verify\nthat the parsed URL will have a valid host before creating the proxy manager."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 2,
+    "repo": "psf/requests",
+    "file": "src/requests/utils.py",
+    "start": 105,
+    "end": 109,
+    "gold_pr": 3979,
+    "code": "L105          try:\nL106              internetSettings = winreg.OpenKey(\nL107                  winreg.HKEY_CURRENT_USER,\nL108                  r\"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\",\nL109              )",
+    "has_reason": true,
+    "question": "这里为什么要打开 Windows 的 Internet Settings 注册表项？",
+    "reason": "这是自定义 Windows 代理绕过实现的一部分：从注册表读取相关设置，同时避开 `urllib.proxy_bypass` 会执行的 DNS 查询。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C43",
+        "url": "https://github.com/psf/requests/issues/3976#issuecomment-295726812",
+        "quote": "Basically, this would be the copy/pasted Windows versions of [ `urllib.proxy_bypass`](https://github.com/python/cpython/blob/98b1c82/Lib/urllib.py#L1633) and [`urllib.proxy_bypass_registry`](https://github.com/python/cpython/blob/98b1c82/Lib/urllib.py#L1581), the latter without the DNS lookups."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 3,
+    "repo": "psf/requests",
+    "file": "src/requests/utils.py",
+    "start": 647,
+    "end": 652,
+    "gold_pr": 2309,
+    "code": "L647              \"In requests 3.0, get_unicode_from_response will be removed. For \"\nL648              \"more information, please see the discussion on issue #2266. (This\"\nL649              \" warning should only appear once.)\"\nL650          ),\nL651          DeprecationWarning,\nL652      )",
+    "has_reason": true,
+    "question": "这里为什么要提示 `get_unicode_from_response` 将在 Requests 3.0 中移除？",
+    "reason": "这个工具函数提供的内容已可通过响应的 `r.text` 获得，而且相关函数偏向处理 HTML 和响应正文，不符合 Requests 作为 HTTP 库的职责，因此计划将其移出并在移除前提前警告用户。",
+    "location": "issue",
+    "evidence": [
+      {
+        "source": "C10",
+        "url": "https://github.com/psf/requests/issues/2266#issuecomment-57961850",
+        "quote": "We already provide the unicode in the response as `r.text`."
+      },
+      {
+        "source": "issue #2266 正文",
+        "url": "https://github.com/psf/requests/issues/2266",
+        "quote": "requests is an _HTTP_ library, not an HTML library. Some of these utility functions are far more focused on HTML and a Response's body than on HTTP. With that said, they don't belong in requests proper. Instead they belong in a third-party library and currently the best place for that is requests-toolbelt."
+      },
+      {
+        "source": "提交说明",
+        "url": "",
+        "quote": "To give users ample time to prepare for this, we've added DeprecationWarnings long in advance."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 4,
+    "repo": "psf/requests",
+    "file": "src/requests/models.py",
+    "start": 1153,
+    "end": 1156,
+    "gold_pr": 3554,
+    "code": "L1153              try:\nL1154                  reason = self.reason.decode(\"utf-8\")\nL1155              except UnicodeDecodeError:\nL1156                  reason = self.reason.decode(\"iso-8859-1\")",
+    "has_reason": true,
+    "question": "这里为什么先按 UTF-8 解码，失败后再回退到 ISO-8859-1？",
+    "reason": "实际服务器既有发送 UTF-8、也有发送 Latin-1 状态原因短语的情况；先尝试 UTF-8、失败时再回退到 ISO-8859-1，是为了尽可能覆盖这两类情况。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C14",
+        "url": "https://github.com/psf/requests/pull/3538#issuecomment-242796711",
+        "quote": "Regardless, I'm happy to remove the 'ignore' encoding directive and instead fall back to ISO-8859-1 if UTF-8 fails. That should cover the complete set of problems."
+      },
+      {
+        "source": "C10",
+        "url": "https://github.com/psf/requests/pull/3538#issuecomment-242742135",
+        "quote": "Another option is that, given that we're off the hot path, we could try to decode as UTF-8 first and then, if that fails, fall back to ISO-8859-1. That is probably the closest to best effort."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 5,
+    "repo": "psf/requests",
+    "file": "src/requests/utils.py",
+    "start": 734,
+    "end": 740,
+    "gold_pr": 1770,
+    "code": "L734      ipaddr = struct.unpack(\"=L\", socket.inet_aton(ip))[0]\nL735      netaddr, bits = net.split(\"/\")\nL736      netmask = struct.unpack(\"=L\", socket.inet_aton(dotted_netmask(int(bits))))[0]\nL737      network = struct.unpack(\"=L\", socket.inet_aton(netaddr))[0] & netmask\nL738      return (ipaddr & netmask) == (network & netmask)\nL739  \nL740  ",
+    "has_reason": true,
+    "question": "这里为什么要把 IP 地址和子网掩码转换成整数后再按位比较？",
+    "reason": "Requests 尽量避免引入非标准库依赖，而为这个功能引入 `netaddr` 被认为不值得。因此这段代码用标准库函数完成 IP 网段匹配。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C1",
+        "url": "https://github.com/psf/requests/pull/1770#issuecomment-29667074",
+        "quote": "Requests tries very hard not to have external dependencies other than those we vendor in, and vendoring in `netaddr` for this task is excessive. You'll need an implementation that doesn't rely on it."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 6,
+    "repo": "psf/requests",
+    "file": "src/requests/sessions.py",
+    "start": 646,
+    "end": 649,
+    "gold_pr": 1151,
+    "code": "L646          send_kwargs = {\nL647              \"timeout\": timeout,\nL648              \"allow_redirects\": allow_redirects,\nL649          }",
+    "has_reason": true,
+    "question": "这里为什么要把 allow_redirects 放进 send_kwargs？",
+    "reason": "此前重定向处理在 Session.request 中，直接用 Session.send 发送 PreparedRequest 时无法正常处理重定向。将处理移到 Session.send 后，需要把 allow_redirects 传给它，才能让这种调用也能控制重定向。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #1151 正文",
+        "url": "https://github.com/psf/requests/pull/1151",
+        "quote": "This closes #1133 and allows users to use Session.send with a prepared request."
+      }
+    ],
+    "reviewed": true,
+    "note": "丢掉了 1 条在原文里找不到的摘录（来源 PR #1151 正文）"
+  },
+  {
+    "id": 7,
+    "repo": "psf/requests",
+    "file": "src/requests/models.py",
+    "start": 886,
+    "end": 890,
+    "gold_pr": 2095,
+    "code": "L886          return \"location\" in self.headers and self.status_code in (\nL887              codes.moved_permanently,\nL888              codes.permanent_redirect,\nL889          )\nL890  ",
+    "has_reason": true,
+    "question": "这里为什么要检查响应头中有 `location`，并且状态码是永久重定向？",
+    "reason": "浏览器收到永久重定向后，之后即使用户再次输入旧地址也不会请求旧地址；这段逻辑据此识别可缓存的永久重定向，以避免重复请求并贴近浏览器行为。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #2095 正文",
+        "url": "https://github.com/psf/requests/pull/2095",
+        "quote": "When web clients like Firefox get a redirect they will not go after the old version any more even if you type it into the address bar."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 8,
+    "repo": "psf/requests",
+    "file": "src/requests/packages.py",
+    "start": 20,
+    "end": 23,
+    "gold_pr": 6562,
+    "code": "L20              imported_mod = sys.modules[mod]\nL21              sys.modules[f\"requests.packages.{mod}\"] = imported_mod\nL22              mod = mod.replace(target, \"chardet\")\nL23              sys.modules[f\"requests.packages.{mod}\"] = imported_mod",
+    "has_reason": true,
+    "question": "为什么这里既按原模块名注册一次，又把模块名替换成 `chardet` 后再注册一次？",
+    "reason": "Requests 可能实际导入的是 `charset-normalizer`，因此要让它的模块也能通过 `requests.packages.chardet.*` 访问；同时保留 chardet 的旧路径以维持向后兼容。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C5",
+        "url": "https://github.com/psf/requests/pull/6562#discussion_r1377461842",
+        "quote": "This is necessary to support charset-normalizer. The idea here is to import charset if it's installed instead of chardet from this location for users."
+      },
+      {
+        "source": "C7",
+        "url": "https://github.com/psf/requests/pull/6562#discussion_r1377658476",
+        "quote": "Because we may as well add charset normalizer in there but also, we want backwards compatibility with chardet"
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 9,
+    "repo": "psf/requests",
+    "file": "src/requests/cookies.py",
+    "start": 415,
+    "end": 422,
+    "gold_pr": 626,
+    "code": "L415          for cookie in iter(self):\nL416              if cookie.name == name:\nL417                  if domain is None or cookie.domain == domain:\nL418                      if path is None or cookie.path == path:\nL419                          return cookie.value\nL420  \nL421          raise KeyError(f\"name={name!r}, domain={domain!r}, path={path!r}\")\nL422  ",
+    "has_reason": true,
+    "question": "这里按 name 查找时，为什么还允许用 domain 和 path 限定匹配范围？",
+    "reason": "同名 cookie 可能属于不同 domain 或 path，不能把它们一概视为冲突；只在 cookie 确实冲突时才报错，也能避免破坏已有客户端代码。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #626 正文",
+        "url": "https://github.com/psf/requests/pull/626",
+        "quote": "I decided to only throw CookieConflictError if there are actually are conflicting cookies (it is fine to have multiple domains in jar), in order to not break any existing client code."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 10,
+    "repo": "psf/requests",
+    "file": "src/requests/packages.py",
+    "start": 10,
+    "end": 14,
+    "gold_pr": 4103,
+    "code": "L10      # This traversal is apparently necessary such that the identities are\nL11      # preserved (requests.packages.urllib3.* is urllib3.*)\nL12      for mod in list(sys.modules):\nL13          if mod == package or mod.startswith(f\"{package}.\"):\nL14              sys.modules[f\"requests.packages.{mod}\"] = sys.modules[mod]",
+    "has_reason": true,
+    "question": "这里为什么要遍历 `sys.modules`，并把所有匹配的子模块也映射到 `requests.packages` 名下？",
+    "reason": "依赖取消内置后，通过 `requests.packages.urllib3` 和顶层 `urllib3` 导入的子模块可能被当作不同模块，导致从两条路径取得的对象身份不一致。需要让这些模块共享身份，避免这种差异。",
+    "location": "issue",
+    "evidence": [
+      {
+        "source": "issue #4102 正文",
+        "url": "https://github.com/psf/requests/issues/4102",
+        "quote": "Caused by the unbundling and related to e.g. #4072"
+      }
+    ],
+    "reviewed": true,
+    "note": "丢掉了 1 条在原文里找不到的摘录（来源 issue #4102 正文）"
+  },
+  {
+    "id": 11,
+    "repo": "psf/requests",
+    "file": "src/requests/help.py",
+    "start": 26,
+    "end": 30,
+    "gold_pr": 4079,
+    "code": "L26  except ImportError:\nL27      pyopenssl = None\nL28      OpenSSL = None\nL29      cryptography = None\nL30  else:",
+    "has_reason": true,
+    "question": "这里导入失败时为什么要把 `pyopenssl`、`OpenSSL` 和 `cryptography` 都设为 `None`？",
+    "reason": "调试信息需要在这些可选依赖缺失时也能生成，并保留固定的字段结构；这样后续还可以从报告中统一收集数据，而不是因为依赖未安装就省略相关信息。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C10",
+        "url": "https://github.com/psf/requests/pull/3937#discussion_r107675167",
+        "quote": "I'd rather not optionally include any part of this, to be fair. This is why I'm including everything. Ostensibly, we could (in the future) start scraping this out of issues with a bot and doing some analysis on the data."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 12,
+    "repo": "psf/requests",
+    "file": "src/requests/cookies.py",
+    "start": 553,
+    "end": 557,
+    "gold_pr": 1772,
+    "code": "L553          rfc2109=False,\nL554          secure=bool(morsel[\"secure\"]),\nL555          value=morsel.value,\nL556          version=morsel[\"version\"] or 0,\nL557      )",
+    "has_reason": false,
+    "question": "这里为什么要把 `secure` 转成布尔值，并在 `version` 为空时回退到 `0`？",
+    "reason": "材料里没有说明。",
+    "location": "comments",
+    "evidence": [],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 13,
+    "repo": "psf/requests",
+    "file": "src/requests/cookies.py",
+    "start": 353,
+    "end": 357,
+    "gold_pr": 3032,
+    "code": "L353          try:\nL354              return super().__contains__(name)\nL355          except CookieConflictError:\nL356              return True\nL357  ",
+    "has_reason": true,
+    "question": "为什么这里捕获到 CookieConflictError 后要返回 True？",
+    "reason": "默认的 `Mapping.__contains__` 会调用 `__getitem__`，而 `RequestsCookieJar` 的 `__getitem__` 遇到同名重复 cookie 时会要求不存在重复并抛出异常。对成员检查而言，只要存在该名称的 cookie 就应返回 True，因此选择覆盖 `__contains__` 并在冲突时返回 True。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C7",
+        "url": "https://github.com/psf/requests/issues/3028#issuecomment-191749404",
+        "quote": "So the problem here is that the default implementation of `collections.Mapping.__contains__` calls in to `__getitem__`, which for the `RequestsCookieJar` requires that there be no duplicate."
+      },
+      {
+        "source": "C7",
+        "url": "https://github.com/psf/requests/issues/3028#issuecomment-191749404",
+        "quote": "In this instance, we probably get the most bang for our buck by just overriding `__contains__` to call the parent implementation, and then catch `CookieConflictError` and return `True` in that instance."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 14,
+    "repo": "psf/requests",
+    "file": "src/requests/auth.py",
+    "start": 282,
+    "end": 285,
+    "gold_pr": 3835,
+    "code": "L282          if not 400 <= r.status_code < 500:\nL283              self._thread_local.num_401_calls = 1\nL284              return r\nL285  ",
+    "has_reason": true,
+    "question": "这里为什么只在 4xx 响应中处理 Digest 认证挑战？",
+    "reason": "RFC 允许在非 401 响应中发送认证挑战，因此不能只限于 401；但在非 4xx 响应中处理挑战，尤其是 3xx 重定向时，可能导致客户端向不同域发送认证信息。故将处理范围限定在 4xx。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C1",
+        "url": "https://github.com/psf/requests/pull/3835#issuecomment-275516875",
+        "quote": "The related RFCs allow for the WWW-Authenticate header in a non-401 response which the client SHOULD respond to if received. I think the conclusion we came to is to support 4XX response codes."
+      },
+      {
+        "source": "C18",
+        "url": "https://github.com/psf/requests/issues/3772#issuecomment-267666875",
+        "quote": "Having these headers sent back on a 30x, for example, could lead to interesting behaviour."
+      },
+      {
+        "source": "C18",
+        "url": "https://github.com/psf/requests/issues/3772#issuecomment-267666875",
+        "quote": "On the other we're being redirected, potentially to a totally different domain."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 15,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/setuponly.py",
+    "start": 23,
+    "end": 26,
+    "gold_pr": 1695,
+    "code": "L23      group.addoption(\nL24          \"--setupshow\",\nL25          \"--setup-show\",\nL26          action=\"store_true\",",
+    "has_reason": true,
+    "question": "这里为什么要提供 `--setupshow` 和 `--setup-show` 这个选项？",
+    "reason": "在有了 `--setup-only` 和 `--setup-plan` 后，也需要一种方式在正常执行测试时查看 fixture 的 setup 和 teardown。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #1695 正文",
+        "url": "https://github.com/pytest-dev/pytest/pull/1695",
+        "quote": "After implementing `--setup-only` and `--setup-plan` it seemed to be reasonable to also include an option to show the fixture setup and teardown, while actually executing the tests."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 16,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/reports.py",
+    "start": 269,
+    "end": 274,
+    "gold_pr": 4965,
+    "code": "L269      pprint(\"-\" * 100, stream=stream)\nL270      pprint(f\"INTERNALERROR: Unknown entry type returned: {type_name}\", stream=stream)\nL271      pprint(f\"report_name: {report_class}\", stream=stream)\nL272      pprint(reportdict, stream=stream)\nL273      pprint(f\"Please report this bug at {url}\", stream=stream)\nL274      pprint(\"-\" * 100, stream=stream)",
+    "has_reason": false,
+    "question": "遇到未知的 entry type 时，为什么要把报告类型、完整报告内容和报错提示都打印出来？",
+    "reason": "材料里没有说明",
+    "location": "comments",
+    "evidence": [],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 17,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/logging.py",
+    "start": 963,
+    "end": 966,
+    "gold_pr": 3194,
+    "code": "L963              elif self._when in (\"teardown\", \"finish\"):\nL964                  if not self._test_outcome_written:\nL965                      self._test_outcome_written = True\nL966                      self.stream.write(\"\\n\")",
+    "has_reason": true,
+    "question": "这里为什么要先检查 `_test_outcome_written`，再决定是否写入换行？",
+    "reason": "finish 区段原先会在每条日志消息之间多出两个换行。这个判断用于避免重复写入换行。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #3194 正文",
+        "url": "https://github.com/pytest-dev/pytest/pull/3194",
+        "quote": "This is a fix for the feature PR https://github.com/pytest-dev/pytest/pull/3189 where we'd always get 2 new lines between each log message on the finish section."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 18,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/skipping.py",
+    "start": 64,
+    "end": 69,
+    "gold_pr": 1472,
+    "code": "L64      config.addinivalue_line(\nL65          \"markers\",\nL66          \"skip(reason=None): skip the given test function with an optional reason. \"\nL67          'Example: skip(reason=\"no way of currently testing this\") skips the '\nL68          \"test.\",\nL69      )",
+    "has_reason": true,
+    "question": "这里为什么要把 `skip` 加入 `markers` 的注册说明中？",
+    "reason": "严格模式下使用 `pytest.mark.skip` 会触发问题，因此需要在标记列表中补上 `skip` 的注册说明。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C3",
+        "url": "https://github.com/pytest-dev/pytest/pull/1472#issuecomment-199745935",
+        "quote": "https://github.com/pytest-dev/pytest/blob/cbb5d48fdd1cc38e79ab915b9d408a2f64e110ed/_pytest/skipping.py#L33 needs another line to fix it - feel free to add it and put yourself in the changelog/authors file"
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 19,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/main.py",
+    "start": 177,
+    "end": 180,
+    "gold_pr": 3201,
+    "code": "L177      group.addoption(\nL178          \"--deselect\",\nL179          action=\"append\",\nL180          metavar=\"nodeid_prefix\",",
+    "has_reason": true,
+    "question": "这里为什么把参数的占位符写成 `nodeid_prefix`？",
+    "reason": "因为 `--deselect` 按节点 ID 的前缀匹配，而不是按路径排除或使用任意模式；这个占位符能说明传入值的用途。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #3201 正文",
+        "url": "https://github.com/pytest-dev/pytest/pull/3201",
+        "quote": "The code matches any `nodeid` that `startswith()` any `--deselect` flag."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 20,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/setuponly.py",
+    "start": 79,
+    "end": 85,
+    "gold_pr": 1647,
+    "code": "L79  \nL80      if msg == \"SETUP\":\nL81          deps = sorted(arg for arg in fixturedef.argnames if arg != \"request\")\nL82          if deps:\nL83              tw.write(\" (fixtures used: {})\".format(\", \".join(deps)))\nL84  \nL85      if hasattr(fixturedef, \"cached_param\"):",
+    "has_reason": false,
+    "question": "这里为什么要把 fixture 的依赖项排序并排除 `request` 后显示？",
+    "reason": "材料里没有说明。",
+    "location": "pr_body",
+    "evidence": [],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 21,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/logging.py",
+    "start": 85,
+    "end": 90,
+    "gold_pr": 3142,
+    "code": "L85          logging.CRITICAL: {\"red\"},\nL86          logging.ERROR: {\"red\", \"bold\"},\nL87          logging.WARNING: {\"yellow\"},\nL88          logging.INFO: {\"green\"},\nL89          logging.DEBUG: {\"purple\"},\nL90          logging.NOTSET: set(),",
+    "has_reason": true,
+    "question": "这里为什么要给不同日志级别的名称配置这些颜色和样式？",
+    "reason": "为了让实时日志的默认输出更美观，提交提出给日志级别名称着色。材料没有进一步说明为何各级别选用这些具体颜色。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #3142 正文",
+        "url": "https://github.com/pytest-dev/pytest/pull/3142",
+        "quote": "I propose to prettify the default output of the live logs a bit by colorizing the levelnames."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 22,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/terminal.py",
+    "start": 1522,
+    "end": 1536,
+    "gold_pr": 7875,
+    "code": "L1522              parts = [(collected_output, {main_color: True})]\nL1523          else:\nL1524              all_tests_were_deselected = self._numcollected == deselected\nL1525              if all_tests_were_deselected:\nL1526                  main_color = \"yellow\"\nL1527                  collected_output = f\"no tests collected ({deselected} deselected)\"\nL1528              else:\nL1529                  main_color = \"green\"\nL1530                  selected = self._numcollected - deselected\nL1531                  collected_output = f\"{selected}/{self._numcollected} tests collected ({deselected} deselected)\"\nL1532  \nL1533              parts = [(collected_output, {main_color: True})]\nL1534  \nL1535          if errors:\nL1536              main_color = _color_for_type[\"error\"]",
+    "has_reason": true,
+    "question": "为什么没有选中任何测试时，要输出“no tests collected”，而不是继续显示 0/总数 的 collected 格式？",
+    "reason": "当没有测试被选中时，显示 `0/0 tests found (0 deselected)` 会显得奇怪；用“no tests collected”能更清楚地表达空结果，同时保留被 deselect 的数量。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C26",
+        "url": "https://github.com/pytest-dev/pytest/issues/7701#issuecomment-716210272",
+        "quote": "What happens if we collect 0 tests? It is outputting `0/0 tests found (0 deselected)` which is a bit weird. I would say that maybe `no tests collected` would be a more interesting option."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 23,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/config/__init__.py",
+    "start": 2488,
+    "end": 2492,
+    "gold_pr": 13732,
+    "code": "L2488          except ImportError as e:\nL2489              warnings.warn(\nL2490                  f\"Failed to import filter module '{e.name}': {arg}\", PytestConfigWarning\nL2491              )\nL2492              continue",
+    "has_reason": true,
+    "question": "这里为什么在导入过滤器类别失败时只发出警告并跳过，而不让 pytest 直接报错？",
+    "reason": "使用最小依赖的测试环境时，警告过滤器引用的第三方库可能没有安装，导致任何测试都会因类别导入失败而中止。将其降为警告并跳过该过滤项，可以避免这个无关依赖阻止测试运行。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #13732 正文",
+        "url": "https://github.com/pytest-dev/pytest/pull/13732",
+        "quote": "If used with warning filters with categories from third-party library, pytest is going to fail for any test without this third-party."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 24,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/_code/code.py",
+    "start": 1444,
+    "end": 1452,
+    "gold_pr": 12959,
+    "code": "L1444          if self.style == \"value\":\nL1445              # Using tw.write instead of tw.line for testing purposes due to TWMock implementation;\nL1446              # lines written with TWMock.line and TWMock._write_source cannot be distinguished\nL1447              # from each other, whereas lines written with TWMock.write are marked with TWMock.WRITE\nL1448              for line in self.lines:\nL1449                  tw.write(line)\nL1450                  tw.write(\"\\n\")\nL1451              return\nL1452  ",
+    "has_reason": true,
+    "question": "这里为什么不用 `tw.line`，而是逐行调用 `tw.write` 并单独写入换行符？",
+    "reason": "`TWMock` 无法区分通过 `line` 写出的普通行和 `_write_source` 写出的行，但会给 `write` 写出的内容加标记。这样测试才能识别这些消息是直接写出的。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C4",
+        "url": "https://github.com/pytest-dev/pytest/pull/12959#discussion_r1842574618",
+        "quote": "Using `TerminalWriter.write` instead of `TerminalWriter.line` because when using `TWMock` . we can't distinguish lines written with `TWMock._write_source` and lines written with `line` directly, whereas with `TWMock.write` we can, with the flag."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 25,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/_code/code.py",
+    "start": 1121,
+    "end": 1125,
+    "gold_pr": 7100,
+    "code": "L1121          elif style == \"value\":\nL1122              if excinfo:\nL1123                  lines.extend(str(excinfo.value).split(\"\\n\"))\nL1124              return ReprEntry(lines, None, None, None, style)\nL1125          else:",
+    "has_reason": true,
+    "question": "这里为什么只把 `excinfo.value` 的内容放进 `ReprEntry`，而不包含 traceback 等信息？",
+    "reason": "为了让 `pytrace=False` 时生成的 `ReprExceptionInfo` 保持与之前字符串输出相同的内容，只显示异常值。已有的其他样式会带入输出中不需要的额外信息。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C9",
+        "url": "https://github.com/pytest-dev/pytest/pull/7100#discussion_r419014581",
+        "quote": "I 've tried to have the same output like in the previously version with ``str`` - that version used only ``excinfo.value``"
+      },
+      {
+        "source": "C9",
+        "url": "https://github.com/pytest-dev/pytest/pull/7100#discussion_r419014581",
+        "quote": "I've tested all previously existed styles and all of them contains in ``ReprExceptionInfo`` information which are not needed in output."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 26,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/assertion/util.py",
+    "start": 184,
+    "end": 191,
+    "gold_pr": 14546,
+    "code": "L184          if not summary_yielded:\nL185              yield summary\nL186              yield \"\"\nL187              summary_yielded = True\nL188          yield (\nL189              f\"(pytest_assertion plugin: representation of details failed: {repr_crash}.\"\nL190          )\nL191          yield \" Probably an object has a faulty __repr__.)\"",
+    "has_reason": true,
+    "question": "这里为什么在 `repr` 失败时仍接着输出错误提示，并且只在此前没输出过时补充 summary？",
+    "reason": "惰性生成解释时，可能已经输出了部分内容才遇到表示对象的异常；保留已有内容并追加失败提示可以避免丢掉这些解释，但部分解释与失败提示连在一起可能让人困惑。只有此前未输出 summary 时才补上它，并在 summary 后留空行。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C8",
+        "url": "https://github.com/pytest-dev/pytest/pull/14546#pullrequestreview-4409115313",
+        "quote": "Regarding the behavior change on exception, I do think the previous behavior was a bit preferable, because I think showing a partial explanation and then the failed message can be confusing. But I think it's acceptable given the advantage."
+      },
+      {
+        "source": "C7",
+        "url": "https://github.com/pytest-dev/pytest/pull/14546#discussion_r3340850607",
+        "quote": "I suggest a comment like this: Only yield summary if there is a detailed explanation. Make sure there's a separating empty line after the summary."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 27,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/mark/structures.py",
+    "start": 692,
+    "end": 695,
+    "gold_pr": 9164,
+    "code": "L692          )\nL693  \nL694      def update(  # type: ignore[override]\nL695          self,",
+    "has_reason": true,
+    "question": "`NodeKeywords.update` 为什么要单独实现，而不是直接沿用基类的实现？",
+    "reason": "因为收集 pandas 项目时，`item.keywords`/`NodeKeywords` 相关操作耗时明显；这项优化旨在减少收集时间。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #9164 正文",
+        "url": "https://github.com/pytest-dev/pytest/pull/9164",
+        "quote": "This saves 2-3s from pandas collection time."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 28,
+    "repo": "pytest-dev/pytest",
+    "file": "src/_pytest/raises.py",
+    "start": 465,
+    "end": 476,
+    "gold_pr": 13192,
+    "code": "L465          exception: BaseExcT_1,\nL466      ) -> bool:\nL467          if self.check is None:\nL468              return True\nL469  \nL470          if self.check(exception):\nL471              return True\nL472  \nL473          check_repr = \"\" if self._nested else \" \" + repr_callable(self.check)\nL474          self._fail_reason = f\"check{check_repr} did not return True\"\nL475          return False\nL476  ",
+    "has_reason": true,
+    "question": "为什么 `check` 校验失败时，嵌套场景会省略 `repr_callable(self.check)`？",
+    "reason": "嵌套匹配时省略 callable 的表示，是为了避免重复信息；失败原因仍会说明 `check` 没有返回 True。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C32",
+        "url": "https://github.com/pytest-dev/pytest/pull/13192#discussion_r1959815496",
+        "quote": "Gave it a go, and removed it from `RaisesExc` to avoid repetition. (it's valid for `RaisesExc` as well, but you're unlikely to care if only using `RaisesExc`)."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 29,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/utils/conf.py",
+    "start": 209,
+    "end": 213,
+    "gold_pr": 3858,
+    "code": "L209          else:\nL210              if feed_uri == \"-\":\nL211                  feed_uri = \"stdout:\"\nL212          check_valid_format(feed_format)\nL213          result[feed_uri] = {\"format\": feed_format}",
+    "has_reason": true,
+    "question": "这里为什么把每个 feed 的配置保存成包含 `format` 的字典，而不是直接保存格式字符串？",
+    "reason": "考虑到未来可能为每个 feed 增加独立配置项，使用字典结构比直接保存格式字符串更容易扩展。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C5",
+        "url": "https://github.com/scrapy/scrapy/pull/3858#issuecomment-511884074",
+        "quote": "I do wonder if, in preparation for a future where we introduce additional per-file settings, we shouldn’t use something like `{'<path>': {'format': '<format>'}}` instead of simply `{'<path>': '<format>'}`."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 30,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/pipelines/files.py",
+    "start": 856,
+    "end": 861,
+    "gold_pr": 1060,
+    "code": "L856          logger.debug(\nL857              \"File (%(status)s): Downloaded file from %(request)s referred in \"\nL858              \"<%(referer)s>\",\nL859              {\"status\": status, \"request\": request, \"referer\": referer},\nL860              extra={\"spider\": info.spider},\nL861          )",
+    "has_reason": true,
+    "question": "这里为什么要把 `info.spider` 放进日志的 `extra` 字段？",
+    "reason": "日志记录带上 spider 实例后，用户可以通过标准 logging 的 Filter 区分不同 spider 的消息，并按需将它们路由到不同输出。这样无需 Scrapy 强制采用每个 spider 单独的 logger 或内置过滤策略。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C7",
+        "url": "https://github.com/scrapy/scrapy/pull/1060#issuecomment-87997499",
+        "quote": "Another problem is that there’s no easy way around passing Crawler or Spider instances to the `extra` parameter in log messages, and then filtering them with custom logging.Filters per crawler/spider to get those messages issued by a specific crawler."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 31,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/extensions/feedexport.py",
+    "start": 974,
+    "end": 979,
+    "gold_pr": 5178,
+    "code": "L974              if not slot.filter.accepts(item):\nL975                  slots.append(\nL976                      slot\nL977                  )  # if slot doesn't accept item, continue with next slot\nL978                  continue\nL979  ",
+    "has_reason": true,
+    "question": "这里 item 未通过过滤时，为什么还要把 slot 放回 slots 再跳过当前 feed？",
+    "reason": "过滤条件是针对各个 feed 的：一个 item 不适合当前 feed，不代表它不适合其他 feed。因此要跳过当前 feed 的导出，同时保留该 slot 并继续检查其他 feed。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C68",
+        "url": "https://github.com/scrapy/scrapy/issues/5161#issuecomment-848485329",
+        "quote": "The point of item filtering in feed exports is to be able to send different items to different output files."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 32,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/core/_http2/stream.py",
+    "start": 326,
+    "end": 330,
+    "gold_pr": 4610,
+    "code": "L326          if (\nL327              self.metadata[\"remaining_content_length\"]\nL328              and not self.metadata[\"stream_closed_server\"]\nL329              and self.metadata[\"request_sent\"]\nL330          ):",
+    "has_reason": true,
+    "question": "这里为什么要同时检查 `remaining_content_length`、`stream_closed_server` 和 `request_sent`，才进入这个分支？",
+    "reason": "这个判断用于识别已发送请求仍有预期内容未收完、且服务端尚未关闭流的情况。HTTP/2 的数据丢失可能导致复用连接受损并影响其他请求，因此需要将这类情况作为失败处理。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C62",
+        "url": "https://github.com/scrapy/scrapy/pull/4610#discussion_r463950582",
+        "quote": "In case of a data loss error, the corresponding HTTP/2 connection may be corrupted, affecting other requests that use the same connection; hence, a ``ResponseFailed([InvalidBodyLengthError])`` failure is always raised for every request that was using that connection."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 33,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/pipelines/files.py",
+    "start": 439,
+    "end": 442,
+    "gold_pr": 2923,
+    "code": "L439          if headers and \"Content-Type\" in headers:\nL440              return headers[\"Content-Type\"]\nL441          return \"application/octet-stream\"\nL442  ",
+    "has_reason": false,
+    "question": "这里在响应头没有 `Content-Type` 时，为什么要返回 `application/octet-stream`？",
+    "reason": "材料里没有说明",
+    "location": "commit",
+    "evidence": [],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 34,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/core/downloader/handlers/http11.py",
+    "start": 451,
+    "end": 456,
+    "gold_pr": 2069,
+    "code": "L451              if respm:\nL452                  extra = {\nL453                      \"status\": int(respm.group(\"status\")),\nL454                      \"reason\": respm.group(\"reason\").strip(),\nL455                  }\nL456              else:",
+    "has_reason": false,
+    "question": "这里为什么要在 `respm` 匹配成功时，把响应的 `status` 和 `reason` 放进 `extra`？",
+    "reason": "材料里没有说明",
+    "location": "comments",
+    "evidence": [],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 35,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/utils/project.py",
+    "start": 127,
+    "end": 130,
+    "gold_pr": 4375,
+    "code": "L127          \"CHECK\",\nL128          \"PROJECT\",\nL129          \"PYTHON_SHELL\",\nL130          \"SETTINGS_MODULE\",",
+    "has_reason": true,
+    "question": "这里为什么要把这些环境变量单独列出来？",
+    "reason": "这些是有效的环境变量，不应被当作需要弃用警告的任意 `SCRAPY_` 变量；这样也能避免把原本可能会定义为 setting 的变量误报为违规变量。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C4",
+        "url": "https://github.com/scrapy/scrapy/pull/4375#issuecomment-592007950",
+        "quote": "Stop warning about valid environment variables."
+      },
+      {
+        "source": "PR #4375 正文",
+        "url": "https://github.com/scrapy/scrapy/pull/4375",
+        "quote": "Before, we were actually defining a `SETTINGS_MODULE` setting, and potentially other variables. Should I just whitelist warning-wise but still allow the setting to be defined?"
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 36,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/utils/iterators.py",
+    "start": 121,
+    "end": 126,
+    "gold_pr": 6391,
+    "code": "L121          warn(\nL122              \"The encoding argument of csviter() is ignored and will be removed\"\nL123              \" in a future Scrapy version.\",\nL124              category=ScrapyDeprecationWarning,\nL125              stacklevel=2,\nL126          )",
+    "has_reason": true,
+    "question": "这里为什么要提示 csviter() 的 encoding 参数已被忽略并将移除？",
+    "reason": "现有的 encoding 功能依赖 row_to_unicode() 处理字节，但这段代码处理的已是字符串，输入也会先按硬编码的 UTF-8 转换，因此该参数实际上不起作用。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C2",
+        "url": "https://github.com/scrapy/scrapy/pull/6391#discussion_r1629881886",
+        "quote": "The existing encoding functionality requires getting bytes in row_to_unicode(), which can't happen as all this code operates on strings (after `_body_or_str(obj, unicode=True)` converts the input with a hardcoded utf-8 encoding, anyway), so it was a no-op."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 37,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/core/scraper.py",
+    "start": 626,
+    "end": 636,
+    "gold_pr": 6430,
+    "code": "L626  \nL627  \nL628  def __getattr__(name: str) -> Any:\nL629      if name == \"Slot\":\nL630          warnings.warn(\nL631              \"scrapy.core.scraper.Slot is deprecated.\",\nL632              ScrapyDeprecationWarning,\nL633              stacklevel=2,\nL634          )\nL635          return _Slot\nL636      raise AttributeError(f\"module {__name__!r} has no attribute {name!r}\")",
+    "has_reason": true,
+    "question": "这里为什么在访问 `scraper.Slot` 时发出弃用警告后仍返回 `_Slot`，而不是直接移除这个属性？",
+    "reason": "Scraper 的 `Slot` 要改为私有实现，但直接移除会破坏已有用法，因此保留旧属性作为向后兼容入口，同时发出弃用警告。",
+    "location": "commit",
+    "evidence": [
+      {
+        "source": "提交说明",
+        "url": "",
+        "quote": "Make scraper.Slot private instead of deprecating its members"
+      },
+      {
+        "source": "提交说明",
+        "url": "",
+        "quote": "Restore backward compatibility in the scraper"
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 38,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/robotstxt.py",
+    "start": 103,
+    "end": 106,
+    "gold_pr": 7830,
+    "code": "L103      def crawl_delay(self, user_agent: str | bytes) -> float | None:\nL104          delay = self.rp.crawl_delay(to_unicode(user_agent))\nL105          return None if delay is None else float(delay)\nL106  ",
+    "has_reason": false,
+    "question": "这里为什么要把 `crawl_delay` 的返回值强制转成 `float`，而不是直接返回解析器的值？",
+    "reason": "材料里没有说明。",
+    "location": "commit",
+    "evidence": [],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 39,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/core/engine.py",
+    "start": 124,
+    "end": 130,
+    "gold_pr": 8217,
+    "code": "L124  _STATE_TRANSITIONS: dict[EngineState, frozenset[EngineState]] = {\nL125      # Shortcut to STOPPED: stopping without a spider\nL126      EngineState.CREATED: frozenset({EngineState.SPIDER_OPENING, EngineState.STOPPED}),\nL127      EngineState.SPIDER_OPENING: frozenset({EngineState.SPIDER_OPEN}),\nL128      # Shortcut to SPIDER_CLOSING: stopping without starting\nL129      EngineState.SPIDER_OPEN: frozenset(\nL130          {EngineState.STARTING, EngineState.SPIDER_CLOSING}",
+    "has_reason": true,
+    "question": "为什么状态转换表允许从 CREATED 直接进入 STOPPED，以及从 SPIDER_OPEN 直接进入 SPIDER_CLOSING？",
+    "reason": "生命周期可能在启动流程完成前就被合法地提前终止，因此状态机需要覆盖尚无 spider 时停止，以及 spider 已打开但 engine 尚未启动时关闭的路径。这样也符合关闭 spider 是停止 engine 的最后一步这一既有顺序，避免启动与停止交错导致挂起等问题。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #8217 正文",
+        "url": "https://github.com/scrapy/scrapy/pull/8217",
+        "quote": "and the low-level justification is \"you need to open the spider before starting the engine\", \"closing the spider stops the engine as the final step\" and \"calling `stop()` directly still called `close_spider()` and only then sent `engine_stopped`\"."
+      },
+      {
+        "source": "issue #6916 正文",
+        "url": "https://github.com/scrapy/scrapy/issues/6916",
+        "quote": "including early spider shutdown for various reasons (which are valid use cases) and early exceptions due to bugs (which is not an expected case but still should behave within certain expected standards) this breaks down with various outcomes, ranging from unexpected log messages to the spider process hanging."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 40,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/settings/default_settings.py",
+    "start": 450,
+    "end": 453,
+    "gold_pr": 7590,
+    "code": "L450  HTTPAUTH_USER = \"\"\nL451  HTTPAUTH_PASS = \"\"\nL452  HTTPAUTH_DOMAIN = None\nL453  ",
+    "has_reason": true,
+    "question": "HTTPAUTH_DOMAIN 为什么默认设为 None？",
+    "reason": "默认行为不能把认证凭据发送到任意位置；要求显式设置认证域名，可以避免此前的安全问题。",
+    "location": "comments",
+    "evidence": [
+      {
+        "source": "C1",
+        "url": "https://github.com/scrapy/scrapy/pull/7590#issuecomment-4678411940",
+        "quote": "with your changes the setting is already None by default, giving the behavior before 1.8.1 security fix? So unless I'm missing some checks we need to make the default behavior not send the creds anywhere."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 41,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/core/downloader/handlers/__init__.py",
+    "start": 161,
+    "end": 168,
+    "gold_pr": 7164,
+    "code": "L161          if not inspect.iscoroutinefunction(dh.download_request):  # pragma: no cover\nL162              warnings.warn(\nL163                  f\"{global_object_name(dh.download_request)} is not a coroutine function.\"\nL164                  f\" This is deprecated, please rewrite it to return a coroutine and remove\"\nL165                  f\" the 'spider' argument.\",\nL166                  category=ScrapyDeprecationWarning,\nL167                  stacklevel=1,\nL168              )",
+    "has_reason": true,
+    "question": "这里为什么要对非协程的 `download_request` 发出弃用警告，而不是直接拒绝？",
+    "reason": "新 API 要求下载处理器使用协程接口，但为了兼容仍在使用旧接口的自定义处理器，暂时保留对旧签名的支持，并用弃用警告提示迁移。",
+    "location": "pr_body",
+    "evidence": [
+      {
+        "source": "PR #7164 正文",
+        "url": "https://github.com/scrapy/scrapy/pull/7164",
+        "quote": "This intentionally breaks the (undocumented) signatures of existing built-in download handlers, but keeps compatibility with (also undocumented) old custom ones, emitting deprecation warnings."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  },
+  {
+    "id": 42,
+    "repo": "scrapy/scrapy",
+    "file": "scrapy/extensions/telnet.py",
+    "start": 68,
+    "end": 72,
+    "gold_pr": 7199,
+    "code": "L68              raise NotConfigured(\nL69                  \"The TelnetConsole extension requires a Twisted reactor.\"\nL70                  \" You can set the TELNETCONSOLE_ENABLED setting to False to remove this warning.\"\nL71              )\nL72  ",
+    "has_reason": true,
+    "question": "为什么没有安装 Twisted reactor 时，TelnetConsole 会抛出 NotConfigured，而不是继续初始化？",
+    "reason": "reactorless 模式需要禁用依赖 reactor 的组件，而 TelnetConsole 需要 Twisted reactor 才能工作。抛出 NotConfigured 可阻止它在该模式下启用，并提示用户关闭相关设置。",
+    "location": "issue",
+    "evidence": [
+      {
+        "source": "issue #7187 正文",
+        "url": "https://github.com/scrapy/scrapy/issues/7187",
+        "quote": "Enabling the reactorless mode should disable reactor-dependent components and maybe enable alternative ones (e.g. different http handlers). It can also be checked in various places."
+      }
+    ],
+    "reviewed": true,
+    "note": ""
+  }
+]

@@ -11,8 +11,10 @@ TODO:
   - [ ] 限流处理：读 X-RateLimit-Remaining，快用完时降级或排队
   - [ ] 无 token 时也能跑（60 次/小时），但要给用户提示
 """
+import asyncio
 import json
 import re
+import time
 
 import httpx
 
@@ -86,13 +88,46 @@ def _cache_save(path: str, data) -> None:
     f.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
 
 
+# ---------- 重试 ----------
+# 代理不稳定时 ReadTimeout / ConnectTimeout 很常见（评测 42 条里一次就超时 4 条）。
+# httpx 自带的 transport retries 只重试连接失败，不管读超时，所以自己包一层。
+RETRY_STATUS = {502, 503, 504}
+RETRY_WAITS = (2, 4)          # 第 1、2 次失败后各等几秒；共试 3 次
+
+
+def _send(c: httpx.Client, url: str, **kw) -> httpx.Response:
+    for wait in (*RETRY_WAITS, None):
+        try:
+            r = c.get(url, **kw)
+            if r.status_code not in RETRY_STATUS or wait is None:
+                return r
+        except httpx.TransportError as e:
+            if wait is None:
+                raise
+            print('[github] %s，%d 秒后重试：%s' % (type(e).__name__, wait, url))
+        time.sleep(wait)
+
+
+async def _asend(c: httpx.AsyncClient, url: str, **kw) -> httpx.Response:
+    for wait in (*RETRY_WAITS, None):
+        try:
+            r = await c.get(url, **kw)
+            if r.status_code not in RETRY_STATUS or wait is None:
+                return r
+        except httpx.TransportError as e:
+            if wait is None:
+                raise
+            print('[github] %s，%d 秒后重试：%s' % (type(e).__name__, wait, url))
+        await asyncio.sleep(wait)
+
+
 def _get(path: str):
     """单个对象的 GET，带缓存。"""
     cached = _cache_load(path)
     if cached is not None:
         return cached
     with httpx.Client(timeout=20) as c:
-        r = c.get(API + path, headers=_headers())
+        r = _send(c, API + path, headers=_headers())
         r.raise_for_status()
         data = r.json()
     _cache_save(path, data)
@@ -110,7 +145,7 @@ def _get_all(path: str) -> list:
     items, url, params = [], API + path, {'per_page': 100}
     with httpx.Client(timeout=20) as c:
         while url:
-            r = c.get(url, headers=_headers(), params=params)
+            r = _send(c, url, headers=_headers(), params=params)
             r.raise_for_status()
             items += r.json()
             url = r.links.get('next', {}).get('url')
@@ -136,7 +171,7 @@ async def get_issue(owner: str, repo: str, number: int) -> dict:
     if cached is not None:
         return cached
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.get(API + path, headers=_headers())
+        r = await _asend(c, API + path, headers=_headers())
         r.raise_for_status()
         data = r.json()
     _cache_save(path, data)

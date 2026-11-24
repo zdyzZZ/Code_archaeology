@@ -15,8 +15,38 @@ from app.agent.state import ArchaeologyState
 from app.github.client import extract_refs,get_issue,git_commit_pulls
 import asyncio
 import httpx
-from app.git.log import commit_info, commit_diff, line_history
+from app.git.log import commit_info, commit_hunks, line_history
 from pathlib import Path
+
+MISSING_DIFF = '（未能获取该提交在这几行的改动）'
+
+
+def blame_origins(blame_lines: list[dict]) -> dict[str, tuple[str, set[int]]]:
+    """sha -> (sha 版本里的路径, sha 版本里的行号集合)，从 blame 结果里整理。"""
+    origins: dict[str, tuple[str, set[int]]] = {}
+    for b in blame_lines:
+        if 'orig_line' not in b:
+            continue
+        path, lines = origins.setdefault(b['sha'], (b['orig_path'], set()))
+        lines.add(b['orig_line'])
+    return origins
+
+
+def diff_for(repo_path: Path, sha: str, history: dict[str, str],
+             origins: dict[str, tuple[str, set[int]]]) -> str:
+    """优先用 git log -L 的 diff；-L 漏掉了 blame 指出的提交时，按 blame 的行号取相关 hunk。"""
+    if sha in history:
+        return history[sha]
+    if sha in origins:
+        path, lines = origins[sha]
+        try:
+            hunks = commit_hunks(repo_path, sha, path, lines)
+        except RuntimeError:
+            hunks = ''
+        if hunks:
+            print('[link_context] %s 不在 git log -L 的结果里，改用 blame 行号取 diff' % sha[:8])
+            return '（git log -L 没有覆盖这个提交，以下是它在 blame 指向的行附近的改动）\n' + hunks
+    return MISSING_DIFF
 
 
 
@@ -52,10 +82,11 @@ def link_context(state: ArchaeologyState) -> dict:
     # 查找历史sha
     history = {h['sha']: h['diff'] for h in
                line_history(repo_path, file_path, state['start_line'], state['end_line'])}
+    origins = blame_origins(state.get('blame_lines', []))
     for new_sha in state['new_shas']:
         if new_sha not in commits:
             info = commit_info(repo_path, new_sha)
-            info['diff'] = history.get(new_sha, '（未能获取该提交在这几行的改动）')
+            info['diff'] = diff_for(repo_path, new_sha, history, origins)
             commits[new_sha] = info
     # 2. 对每个 commit 找编号
     for sha, info in commits.items():
