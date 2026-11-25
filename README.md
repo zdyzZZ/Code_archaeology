@@ -52,7 +52,7 @@ HITL 中断点：深挖层数或 token 预算超限时暂停，询问是否继�
 |---|---|
 | 编排 | LangGraph（State / Checkpoint / Interrupt / Streaming） |
 | 工具 | MCP Server（git_blame / git_log / search_issues / get_pr ...） |
-| 检索 | BM25（rank_bm25）+ 向量（Chroma）+ RRF 融合 + Cross-Encoder Rerank |
+| 检索 | BM25（rank_bm25 的 BM25Plus）+ 多语言向量（multilingual-e5-small + numpy）+ RRF 融合 + Cross-Encoder 重排（bge-reranker-base） |
 | 可观测 | Langfuse（Trace / Dataset / Experiment） |
 | API | FastAPI + SSE 流式输出 |
 | 前端 | 单文件 HTML（无框架） |
@@ -60,10 +60,33 @@ HITL 中断点：深挖层数或 token 预算超限时暂停，询问是否继�
 
 ## 评测
 
-有真实 ground truth：给定一个函数的当前形态，**真实答案是引入当前逻辑的那个 PR**。
-从热门 repo 可自动构造数百条标注，算 Top-1 / Top-3 命中率，并对比 Hybrid vs Vector-only。
+42 条样本，来自 psf/requests、pytest-dev/pytest、scrapy/scrapy，分两类问题：
 
-见 [evals/README.md](evals/README.md)。
+1. **找得准吗**：一段代码的当前逻辑是哪个 PR 引入的，是客观事实。用维护者的 `.git-blame-ignore-revs`
+   跳过格式化提交算出答案，再和 GitHub 交叉核对，两边一致才保留
+2. **答得出"为什么"吗**：其中 36 条在 PR / issue 讨论里能找到理由，标注了中文问题、标准理由和英文原文证据
+   （LLM 起草、人工审核），由 LLM 评委对照打分
+
+| 检索模式 | 关键 PR Top-1 | 证据进入材料 | 其中理由在评论里（20 条） | 理由得分 |
+|---|---|---|---|---|
+| `off`（按位置截断，v4） | 92% | 47% | **5%** | 0.76 |
+| `bm25` | 94% | 69% | 65% | 0.85 |
+| `vector` | 94% | 56% | 55% | 0.78 |
+| `hybrid`（RRF） | 94% | 69% | 60% | 0.79 |
+| **`hybrid_rerank`（默认）** | 94% | **75%** | **70%** | 0.82 |
+
+- 截断方式不拉评论，而一半以上的理由在评论里；检索把这部分证据从 5% 提到 70%
+- BM25 和向量各自找到对方漏掉的证据，单用 RRF 没超过 BM25，加上重排才兑现了两路的互补
+- 代价：理由在 PR 正文里的样本，截断方式反而最好（证据 100% vs 82%）
+- 理由得分是单次运行，有约 ±0.05 的噪声，模式之间的比较以证据指标为准
+- 表里是带问题运行的 36 条；不带问题时，全部 42 条的关键 PR Top-1 是 98%（`off`）
+
+分析和全部数字见 [ADR-0001](docs/adr/0001-hybrid-retrieval-and-rrf.md)，构造方法见 [evals/README.md](evals/README.md)。
+
+```bash
+python -m evals.run_eval                                   # 关键 PR 命中率
+python -m evals.run_eval --questions --mode hybrid_rerank  # 带问题，算理由类指标
+```
 
 ## 快速开始
 

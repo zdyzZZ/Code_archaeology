@@ -48,27 +48,49 @@
 
 ## 指标
 
+关键 PR（`python -m evals.run_eval`）：
+
 | 指标 | 含义 |
 |---|---|
-| Top-1 命中率 | Agent 给出的首要关键 PR 是否正确 |
-| Top-3 命中率 | 正确 PR 是否在前三 |
-| 检索 Recall@K | 标准答案对应的 issue/PR 是否被召回 |
-| 平均深度 | 平均挖几层收敛 |
-| 平均成本 | 每次考古的 token 与耗时 |
+| Top-1 / Top-3 命中率 | Agent 给出的关键 PR 第一个 / 前三个里有没有标准答案 |
+| 挖到提交 | 标准答案的提交是否出现在 commits 里（考 blame、深挖、噪声过滤） |
+| 材料含 PR | 标准答案 PR 是否被拉到（考 link_context） |
+| 平均深度、平均秒数 | 挖几层收敛、每条耗时 |
 
-## 对照组
+没命中的样本按"卡在哪一步"归类：没挖到提交 / 材料里没有 PR / 材料里有但没选对。
 
-- Vector-only
-- BM25-only
-- Hybrid + RRF
-- Hybrid + RRF + Rerank
+理由（`python -m evals.run_eval --questions`）：
 
-跑完把数字填进 README 和 ADR-0001。
+| 指标 | 含义 |
+|---|---|
+| 证据进材料 | narrate 收到的材料里有没有证据原文；五种模式都能比，`off` 时能看出截断丢了多少 |
+| 证据 Recall@5 | 检索前 5 段里有没有证据原文（只有检索模式有） |
+| 理由得分 | LLM 评委对照标准理由打 0 / 1 / 2，取平均除以 2；出处正确：有没有标对 PR / 评论作者 |
+
+## 理由标注
+
+`evals/reasons.json`，每条样本一项：中文问题（不含答案）、标准理由、英文原文证据摘录、理由在哪
+（commit / pr_body / issue / comments）。
+
+1. `python -m evals.draft_reasons`：LLM 读完标准答案 PR 的正文、全部评论和引用的 issue，起草标注。
+   证据摘录必须能在原文里逐字找到，找不到的丢掉
+2. 人工审核，把 `reviewed` 改成 true。agent、评委、起草用的是同一个模型，不审核就是自己出题自己答
+3. 改了理由或证据后用 `--rejudge` 重新判分，不用重跑 agent；改了问题要重跑
+
+**噪声**：模型只支持默认温度，单次运行的理由得分在 36 条上有约 ±0.05 的波动，
+比较检索模式时以证据指标为准（见 ADR-0001）。
+
+## 结果
+
+`results/<mode>.md`（关键 PR）、`results/<mode>-q.md`（带问题）。五种检索模式的对照和结论见
+[ADR-0001](../docs/adr/0001-hybrid-retrieval-and-rrf.md)。
 
 ## TODO
 
 - [x] build_dataset.py：自动构造
-- [x] run_eval.py：跑评测并出表（`python -m evals.run_eval --mode off --limit 3`）
-- [ ] 5 种 retrieval_mode 各跑一遍做对照
+- [x] run_eval.py：跑评测并出表
+- [x] 5 种 retrieval_mode 各跑一遍做对照
+- [ ] 7 条五种模式都没找到证据的样本（id 6、11、28、30、31、32、42）：证据没进语料、排不进前 8，还是标注问题
+- [ ] 理由得分多次运行取平均，让检索模式之间的得分也能比较
 - [ ] 失败案例分析：哪类代码考不出来（提示：squash 合并的仓库、
       commit message 只写 "fix bug" 的仓库）
