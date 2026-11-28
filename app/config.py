@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     retrieval_mode: Literal['off', 'bm25', 'vector', 'hybrid', 'hybrid_rerank'] = 'hybrid_rerank'
     retrieve_top_k: int = 8          # 最后交给 narrate 几段
     retrieve_candidates: int = 20    # 每一路召回几段、重排前留几段
+    # hybrid_rerank 时重排看哪些候选：rrf = RRF 融合后的前 retrieve_candidates 段；union = 两路各自前 N 段的并集
+    rerank_pool: Literal['rrf', 'union'] = 'rrf'
     # 两个模型都要能处理中文：用户问题是中文，PR 讨论是英文
     embedding_model: str = 'intfloat/multilingual-e5-small'
     rerank_model: str = 'BAAI/bge-reranker-base'

@@ -52,7 +52,8 @@ def retrieve(state: ArchaeologyState) -> dict:
     bodies, comments = _collect(state)
     docs = build_documents(state.get('commits', []), state.get('issues', []), bodies, comments)
     query = build_query(state)
-    results = search(query, docs, mode, top_k=settings.retrieve_top_k, candidates=settings.retrieve_candidates)
+    results = search(query, docs, mode, top_k=settings.retrieve_top_k, candidates=settings.retrieve_candidates,
+                     pool=settings.rerank_pool)
 
     stats = {'mode': mode, 'corpus': len(docs), 'comments': sum(len(c) for c in comments.values()),
              'selected': len(results)}

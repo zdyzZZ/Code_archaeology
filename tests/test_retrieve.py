@@ -113,3 +113,41 @@ def test_retrieve节点不联网(monkeypatch):
     assert out['retrieval_stats']['mode'] == 'bm25'
     assert out['retrieval_stats']['comments'] == 1
     assert out['retrieved'] and all('source' in r for r in out['retrieved'])
+
+
+# ---------- 重排候选池：rrf vs union（假的召回和重排，不加载模型） ----------
+
+def _fake_routes(monkeypatch, bm25_ids, vec_ids):
+    import app.rag.pipeline as pipeline
+    import app.rag.rerank as rerank_mod
+    import app.rag.vector as vector_mod
+
+    class FakeIndex:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def search(self, query, k):
+            return self.ids[:k]
+
+    monkeypatch.setattr(pipeline, 'BM25Index', lambda docs: FakeIndex(bm25_ids))
+    monkeypatch.setattr(vector_mod, 'VectorIndex', lambda docs: FakeIndex(vec_ids))
+    # 假重排：d9 最相关，其余保持输入顺序
+    monkeypatch.setattr(rerank_mod, 'rerank', lambda q, docs, k: [
+        (d, 1.0 if d.id == 'd9' else 0.0) for d in sorted(docs, key=lambda d: d.id != 'd9')][:k])
+
+
+def test_union池让只在一路靠前的段也能被重排看到(monkeypatch):
+    # d9 只在向量里排第 3，BM25 前 3 里没有；两路都中等的 d0~d2 会把它挤出 RRF 前 3
+    _fake_routes(monkeypatch, bm25_ids=['d0', 'd1', 'd2'], vec_ids=['d1', 'd0', 'd9'])
+    rrf_pool = search('q', DOCS, 'hybrid_rerank', top_k=1, candidates=3, pool='rrf')
+    union_pool = search('q', DOCS, 'hybrid_rerank', top_k=1, candidates=3, pool='union')
+    assert rrf_pool[0]['id'] != 'd9'
+    assert union_pool[0]['id'] == 'd9'
+
+
+def test_union池只影响hybrid_rerank(monkeypatch):
+    _fake_routes(monkeypatch, bm25_ids=['d0', 'd1', 'd2'], vec_ids=['d1', 'd0', 'd9'])
+    for mode in ('bm25', 'vector', 'hybrid'):
+        a = [r['id'] for r in search('q', DOCS, mode, top_k=3, candidates=3, pool='rrf')]
+        b = [r['id'] for r in search('q', DOCS, mode, top_k=3, candidates=3, pool='union')]
+        assert a == b, mode

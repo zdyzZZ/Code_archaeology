@@ -141,10 +141,15 @@
         "source": "PR #1151 正文",
         "url": "https://github.com/psf/requests/pull/1151",
         "quote": "This closes #1133 and allows users to use Session.send with a prepared request."
+      },
+      {
+        "source": "#1133 评论 · maxcountryman",
+        "url": "https://github.com/psf/requests/issues/1133#issuecomment-12664828",
+        "quote": "how can you pass `allow_redirects` to `s.send`? Unless I'm totally missing something, the answer is you can't, because `s.request` does more than just construct a `Request` object. It does neat things like extrapolate on that object to follow redirects"
       }
     ],
     "reviewed": true,
-    "note": "丢掉了 1 条在原文里找不到的摘录（来源 PR #1151 正文）"
+    "note": "丢掉了 1 条在原文里找不到的摘录（来源 PR #1151 正文）；2026-11-28 补充等价证据（诊断发现报告用的是这一段）"
   },
   {
     "id": 7,
@@ -703,10 +708,15 @@
         "source": "C68",
         "url": "https://github.com/scrapy/scrapy/issues/5161#issuecomment-848485329",
         "quote": "The point of item filtering in feed exports is to be able to send different items to different output files."
+      },
+      {
+        "source": "#5161 评论 · Gallaecio",
+        "url": "https://github.com/scrapy/scrapy/issues/5161#issuecomment-848848039",
+        "quote": "The point of item filter is to allow filtering items differently for different feeds. So `accepts` needs to know for which feed it is filtering in some way."
       }
     ],
     "reviewed": true,
-    "note": ""
+    "note": "2026-11-28 补充等价证据（诊断发现报告用的是这一段）"
   },
   {
     "id": 32,

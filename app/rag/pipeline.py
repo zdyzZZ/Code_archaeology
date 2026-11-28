@@ -7,7 +7,12 @@
 各模式：
     bm25 / vector    只用一路召回，取前 top_k
     hybrid           两路召回 + RRF，取前 top_k
-    hybrid_rerank    两路召回 + RRF 取前 candidates 段 + 重排，取前 top_k
+    hybrid_rerank    两路召回 + 重排，取前 top_k。重排看哪些候选由 pool 决定：
+                       rrf    RRF 融合后的前 candidates 段（默认）
+                       union  两路各自前 candidates 段的并集（最多 2 × candidates 段）
+                     union 的理由：只在一路里排得靠前的段，RRF 会把它排到两路都中等的段后面，
+                     截掉之后重排根本看不到它（评测 id 30：向量第 18、BM25 第 48，进不了 RRF 前 20）。
+                     既然重排会重新打分，就不必先用 RRF 砍候选
 
 返回的每一条带 found_by，记录它在每一路里排第几——评测时分析"谁找到的"就靠它。
 """
@@ -16,7 +21,8 @@ from app.rag.corpus import Document
 from app.rag.fusion import rrf
 
 
-def search(query: str, docs: list[Document], mode: str, top_k: int = 8, candidates: int = 20) -> list[dict]:
+def search(query: str, docs: list[Document], mode: str, top_k: int = 8, candidates: int = 20,
+           pool: str = 'rrf') -> list[dict]:
     if not docs or not query.strip() or mode == 'off':
         return []
     by_id = {d.id: d for d in docs}
@@ -35,7 +41,12 @@ def search(query: str, docs: list[Document], mode: str, top_k: int = 8, candidat
         for rank, i in enumerate(vec_ids, 1):
             found_by[i]['vector'] = rank
 
-    ids = lists[0] if len(lists) == 1 else rrf(lists, top_k=candidates)
+    if len(lists) == 1:
+        ids = lists[0]
+    elif mode == 'hybrid_rerank' and pool == 'union':
+        ids = rrf(lists)                     # 并集；按 RRF 排序只是为了顺序稳定，重排会重新打分
+    else:
+        ids = rrf(lists, top_k=candidates)
 
     scores: dict[str, float] = {}
     if mode == 'hybrid_rerank':
